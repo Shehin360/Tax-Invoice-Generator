@@ -1,0 +1,42 @@
+{
+  "name": "gst-invoice-generator",
+  "version": "1.0.0",
+  "description": "Cross-platform GST Tax Invoice Generator for M A P SPICES",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "rebuild": "electron-rebuild -f -w better-sqlite3",
+    "build:win": "electron-builder --win",
+    "build:mac": "electron-builder --mac",
+    "build:linux": "electron-builder --linux"
+  },
+  "dependencies": {
+    "better-sqlite3": "^11.7.0"
+  },
+  "devDependencies": {
+    "electron": "^35.0.0",
+    "electron-builder": "^25.1.0",
+    "electron-rebuild": "^3.2.9"
+  },
+  "build": {
+    "appId": "com.mapspices.invoicegenerator",
+    "productName": "Invoice Generator",
+    "files": [
+      "main.js",
+      "preload.js",
+      "database/**/*",
+      "renderer/**/*",
+      "pages/**/*",
+      "templates/**/*"
+    ],
+    "win": {
+      "target": "nsis"
+    },
+    "mac": {
+      "target": "dmg"
+    },
+    "linux": {
+      "target": "AppImage"
+    }
+  }
+}

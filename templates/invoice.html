@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Tax Invoice - {{INVOICE_NO}}</title>
+<style>
+  @page { size: A4; margin: 10mm; }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: Arial, Helvetica, sans-serif; font-size: 11px; color: #000; line-height: 1.4; }
+  .invoice-wrapper {
+    width: 100%;
+    border: 2px solid #000;
+  }
+  table { width: 100%; border-collapse: collapse; }
+  td, th { border: 1px solid #000; padding: 4px 6px; vertical-align: top; }
+  .center { text-align: center; }
+  .right { text-align: right; }
+  .bold { font-weight: bold; }
+  .small { font-size: 9px; }
+  em { font-style: italic; }
+  h2 { font-size: 14px; text-align: center; margin: 0; padding: 6px 0; font-weight: bold; }
+
+  /* Remove outer borders from tables since wrapper provides the border */
+  .invoice-wrapper table { border: none; }
+  .invoice-wrapper table td,
+  .invoice-wrapper table th { border: 1px solid #000; }
+
+  /* First table - remove top borders on first row since wrapper has border */
+  .main-table > tbody > tr:first-child > td { border-top: none; }
+  .main-table > tbody > tr > td:first-child { border-left: none; }
+  .main-table > tbody > tr > td:last-child { border-right: none; }
+  .main-table > tbody > tr:last-child > td { border-bottom: none; }
+
+  .items-table > thead > tr > th:first-child,
+  .items-table > tbody > tr > td:first-child,
+  .items-table > tfoot > tr > td:first-child { border-left: none; }
+  .items-table > thead > tr > th:last-child,
+  .items-table > tbody > tr > td:last-child,
+  .items-table > tfoot > tr > td:last-child { border-right: none; }
+  .items-table > tfoot > tr:last-child > td { border-bottom: none; }
+
+  .words-table > tbody > tr > td:first-child { border-left: none; }
+  .words-table > tbody > tr > td:last-child { border-right: none; }
+  .words-table > tbody > tr:last-child > td { border-bottom: none; }
+
+  .hsn-table > thead > tr > th:first-child,
+  .hsn-table > tbody > tr > td:first-child { border-left: none; }
+  .hsn-table > thead > tr > th:last-child,
+  .hsn-table > tbody > tr > td:last-child { border-right: none; }
+  .hsn-table > tbody > tr:last-child > td { border-bottom: none; }
+
+  .footer-table > tbody > tr > td:first-child { border-left: none; }
+  .footer-table > tbody > tr > td:last-child { border-right: none; }
+  .footer-table > tbody > tr:last-child > td { border-bottom: none; }
+
+  .original-label { text-align: right; font-style: italic; font-size: 10px; padding: 4px 8px; }
+  .section-label { font-size: 10px; font-weight: normal; padding: 2px 6px; background: #f5f5f5; }
+  .items-table th { background: #f0f0f0; font-size: 10px; text-align: center; padding: 5px 4px; }
+  .items-table td { font-size: 11px; padding: 4px 6px; }
+  .total-row { font-weight: bold; background: #f9f9f9; }
+  .hsn-table th { background: #f0f0f0; font-size: 9px; padding: 4px; text-align: center; }
+  .hsn-table td { font-size: 10px; padding: 3px 5px; }
+  .footer-table { font-size: 10px; }
+  .computer-gen { text-align: center; font-size: 9px; font-style: italic; padding: 6px; }
+</style>
+</head>
+<body>
+<div class="invoice-wrapper">
+
+<!-- Header / Seller / Meta -->
+<table class="main-table">
+  <tr><td colspan="6" class="original-label">(ORIGINAL FOR RECIPIENT)</td></tr>
+  <tr><td colspan="6"><h2>Tax Invoice</h2></td></tr>
+  <tr>
+    <td colspan="3" rowspan="5" style="width:50%;">
+      <div class="bold" style="font-size:13px;margin-bottom:4px;">{{SELLER_NAME}}</div>
+      <div>{{SELLER_ADDRESS}}</div>
+      <div style="margin-top:4px;">GSTIN/UIN: <strong>{{SELLER_GSTIN}}</strong></div>
+      <div>State Name: {{SELLER_STATE}}, Code: {{SELLER_STATE_CODE}}</div>
+    </td>
+    <td style="width:16%;">Invoice No.</td>
+    <td colspan="2"><strong>{{INVOICE_NO}}</strong></td>
+  </tr>
+  <tr><td>Dated</td><td colspan="2"><strong>{{DATE}}</strong></td></tr>
+  <tr><td>Delivery Note</td><td colspan="2">{{DELIVERY_NOTE}}</td></tr>
+  <tr><td>Reference No.</td><td colspan="2">{{REFERENCE_NO}}</td></tr>
+  <tr><td>Buyer's Order No.</td><td colspan="2">{{BUYER_ORDER_NO}}</td></tr>
+  <tr><td colspan="6" class="section-label">Consignee (Ship to)</td></tr>
+  <tr>
+    <td colspan="6">
+      <div class="bold">{{BUYER_NAME}}</div>
+      <div>{{BUYER_ADDRESS}}</div>
+      <div>GSTIN/UIN: <strong>{{BUYER_GSTIN}}</strong></div>
+      <div>State Name: {{BUYER_STATE}}, Code: {{BUYER_STATE_CODE}}</div>
+    </td>
+  </tr>
+  <tr><td colspan="6" class="section-label">Buyer (Bill to)</td></tr>
+  <tr>
+    <td colspan="6">
+      <div class="bold">{{BUYER_NAME}}</div>
+      <div>{{BUYER_ADDRESS}}</div>
+      <div>GSTIN/UIN: <strong>{{BUYER_GSTIN}}</strong></div>
+      <div>State Name: {{BUYER_STATE}}, Code: {{BUYER_STATE_CODE}}</div>
+    </td>
+  </tr>
+  <tr>
+    <td colspan="2">Dispatch Doc No.: {{DISPATCH_DOC_NO}}</td>
+    <td colspan="2">Dispatched Through: {{DISPATCHED_THROUGH}}</td>
+    <td colspan="2">Destination: <strong>{{DESTINATION}}</strong></td>
+  </tr>
+  <tr>
+    <td colspan="3">Terms of Delivery: {{TERMS_OF_DELIVERY}}</td>
+    <td colspan="3">Vehicle No.: <strong>{{VEHICLE_NO}}</strong></td>
+  </tr>
+</table>
+
+<!-- Line Items -->
+<table class="items-table">
+  <thead>
+    <tr>
+      <th style="width:6%;">Sl No.</th>
+      <th style="width:34%;">Description of Goods</th>
+      <th style="width:12%;">HSN/SAC</th>
+      <th style="width:14%;">Quantity</th>
+      <th style="width:14%;">Rate</th>
+      <th style="width:20%;">Amount (₹)</th>
+    </tr>
+  </thead>
+  <tbody>
+    {{ITEM_ROWS}}
+  </tbody>
+  <tfoot>
+    <tr class="total-row">
+      <td class="right" colspan="3"><strong>Total</strong></td>
+      <td class="right"><strong>{{TOTAL_QTY}}</strong></td>
+      <td class="right"></td>
+      <td class="right"><strong>₹{{TOTAL_AMOUNT}}</strong></td>
+    </tr>
+    <tr>
+      <td colspan="6" class="right small">E. & O.E</td>
+    </tr>
+  </tfoot>
+</table>
+
+<!-- Amount in Words -->
+<table class="words-table">
+  <tr>
+    <td>
+      <div class="small">Amount Chargeable (in words)</div>
+      <div class="bold">{{AMOUNT_IN_WORDS}}</div>
+    </td>
+  </tr>
+</table>
+
+<!-- HSN/SAC Tax Breakdown -->
+<table class="hsn-table">
+  <thead>
+    <tr>
+      <th rowspan="2">HSN/SAC</th>
+      <th rowspan="2">Taxable Value</th>
+      <th colspan="2">Central Tax</th>
+      <th colspan="2">State Tax</th>
+      <th rowspan="2">Total Tax Amount</th>
+    </tr>
+    <tr>
+      <th>Rate</th><th>Amount</th>
+      <th>Rate</th><th>Amount</th>
+    </tr>
+  </thead>
+  <tbody>
+    {{HSN_ROWS}}
+  </tbody>
+</table>
+
+<!-- Tax in Words + Declaration + Signature -->
+<table class="footer-table">
+  <tr>
+    <td colspan="4">
+      <div class="small">Tax Amount (in words): <strong>{{TAX_IN_WORDS}}</strong></div>
+      <div style="margin-top:8px;font-size:9px;">
+        <em>Declaration:</em> We declare that this invoice shows the actual price of the goods described
+        and that all particulars are true and correct.
+      </div>
+    </td>
+    <td colspan="2" style="text-align:right;vertical-align:bottom;">
+      <div style="margin-bottom:4px;">for <strong>{{SELLER_NAME}}</strong></div>
+      <div style="height:40px;"></div>
+      <div>Authorised Signatory</div>
+    </td>
+  </tr>
+  <tr>
+    <td colspan="6" class="computer-gen">This is a Computer Generated Invoice</td>
+  </tr>
+</table>
+
+</div>
+</body>
+</html>
