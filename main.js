@@ -28,6 +28,28 @@ function createWindow() {
     mainWindow.show();
   });
 
+  let isAppClosing = false;
+  mainWindow.on('close', async (e) => {
+    if (isAppClosing) return;
+    e.preventDefault();
+    try {
+      const isDirty = await mainWindow.webContents.executeJavaScript('window._formDirty');
+      if (isDirty) {
+        const choice = dialog.showMessageBoxSync(mainWindow, {
+          type: 'question',
+          buttons: ['Quit and Lose Changes', 'Cancel'],
+          title: 'Unsaved Changes',
+          message: 'You have an unsaved invoice draft. Are you sure you want to quit?'
+        });
+        if (choice !== 0) return; // Cancelled
+      }
+    } catch (err) {
+      console.error('Error checking dirty state', err);
+    }
+    isAppClosing = true;
+    mainWindow.close();
+  });
+  
   mainWindow.on('closed', () => {
     mainWindow = null;
   });
@@ -42,6 +64,14 @@ app.whenReady().then(() => {
       createWindow();
     }
   });
+});
+
+app.on('before-quit', () => {
+  try {
+    db.closeDatabase();
+  } catch (e) {
+    console.error('Error closing database:', e);
+  }
 });
 
 app.on('window-all-closed', () => {
@@ -240,6 +270,7 @@ ipcMain.handle('generate-pdf', async (event, invoiceId) => {
       webPreferences: {
         contextIsolation: true,
         nodeIntegration: false,
+        sandbox: true,
       },
     });
 
@@ -443,6 +474,15 @@ function nlToBr(str) {
   return str ? str.replace(/\n/g, '<br>') : '';
 }
 
+function formatIndianDate(isoDate) {
+  if (!isoDate) return '';
+  const parts = isoDate.split('-');
+  if (parts.length === 3) {
+    return `${parts[2]}-${parts[1]}-${parts[0]}`;
+  }
+  return isoDate;
+}
+
 function populateTemplate(html, invoice) {
   const replacements = {
     '{{SELLER_NAME}}': invoice.seller_name || '',
@@ -451,7 +491,7 @@ function populateTemplate(html, invoice) {
     '{{SELLER_STATE}}': invoice.seller_state_name || '',
     '{{SELLER_STATE_CODE}}': invoice.seller_state_code || '',
     '{{INVOICE_NO}}': invoice.invoice_no || '',
-    '{{DATE}}': invoice.date || '',
+    '{{DATE}}': formatIndianDate(invoice.date),
     '{{DELIVERY_NOTE}}': invoice.delivery_note || '',
     '{{REFERENCE_NO}}': invoice.reference_no || '',
     '{{BUYER_ORDER_NO}}': invoice.buyer_order_no || '',

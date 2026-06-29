@@ -239,6 +239,7 @@ async function loadPage(page) {
 // ─── Preview Modal ───
 document.getElementById("preview-close").addEventListener("click", () => {
   document.getElementById("preview-modal").style.display = "none";
+  document.getElementById("preview-iframe").srcdoc = "";
 });
 
 async function previewInvoice(id) {
@@ -249,6 +250,28 @@ async function previewInvoice(id) {
   iframe.srcdoc = res.data;
   modal.style.display = "flex";
 }
+
+// ─── Keyboard Shortcuts ───
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') {
+    const previewModal = document.getElementById('preview-modal');
+    if (previewModal && previewModal.style.display === 'flex') {
+      previewModal.style.display = 'none';
+      document.getElementById('preview-iframe').srcdoc = '';
+    }
+    const draftModal = document.getElementById('draft-modal');
+    if (draftModal && draftModal.style.display === 'flex') {
+      draftModal.style.display = 'none';
+    }
+  }
+  if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+    if (currentPage === 'new-invoice') {
+      e.preventDefault();
+      const saveBtn = document.getElementById('inv-save');
+      if (saveBtn) saveBtn.click();
+    }
+  }
+});
 
 // ─── Init ───
 navigateTo("dashboard");

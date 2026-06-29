@@ -175,6 +175,10 @@ function updateBuyer(id, data) {
 }
 
 function deleteBuyer(id) {
+  const used = db.prepare('SELECT COUNT(*) as count FROM invoices WHERE buyer_id = ?').get(id);
+  if (used.count > 0) {
+    throw new Error(`Cannot delete buyer: associated with ${used.count} invoice(s).`);
+  }
   db.prepare('DELETE FROM buyers WHERE id = ?').run(id);
 }
 
@@ -338,7 +342,7 @@ function getInvoices(filters = {}) {
     params.push(filters.dateTo);
   }
 
-  query += ' ORDER BY i.created_at DESC';
+  query += ' ORDER BY i.created_at DESC LIMIT 50';
 
   return db.prepare(query).all(...params);
 }
@@ -429,10 +433,18 @@ function getDashboardStats() {
   return { totalInvoices, monthRevenue, totalGst };
 }
 
+function closeDatabase() {
+  if (db) {
+    db.close();
+    db = null;
+  }
+}
+
 module.exports = {
   initDatabase,
   getDb,
   getDbPath,
+  closeDatabase,
   saveSeller,
   getSeller,
   saveBuyer,
