@@ -245,8 +245,8 @@ ipcMain.handle('generate-pdf', async (event, invoiceId) => {
 
     await pdfWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`);
 
-    // Wait for content to render
-    await new Promise(resolve => setTimeout(resolve, 500));
+    // Wait for fonts and content to render without a fixed delay
+    await pdfWindow.webContents.executeJavaScript('document.fonts.ready.then(() => true)');
 
     const pdfBuffer = await pdfWindow.webContents.printToPDF({
       pageSize: 'A4',
@@ -356,6 +356,16 @@ ipcMain.handle('preview-invoice', async (event, invoiceId) => {
 });
 
 // ─── Template Population ───
+
+function escapeHtml(str) {
+  if (str === null || str === undefined) return '';
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
 
 function formatIndianNumber(num) {
   if (num === null || num === undefined) return '0';
@@ -481,9 +491,9 @@ function populateTemplate(html, invoice) {
       itemRows += `
         <tr>
           <td class="center">${item.sl_no}</td>
-          <td>${item.description || ''}</td>
-          <td class="center">${item.hsn_sac || ''}</td>
-          <td class="right">${item.quantity || ''} ${item.unit || ''}</td>
+          <td>${escapeHtml(item.description || '')}</td>
+          <td class="center">${escapeHtml(item.hsn_sac || '')}</td>
+          <td class="right">${item.quantity || ''} ${escapeHtml(item.unit || '')}</td>
           <td class="right">${formatIndianNumber(item.rate)}</td>
           <td class="right">${formatIndianNumber(item.amount)}</td>
         </tr>

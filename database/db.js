@@ -205,6 +205,11 @@ function validateInvoiceData(data) {
   if (data.total_amount !== undefined && data.total_amount !== null && data.total_amount < 0) {
     throw new Error('Total amount cannot be negative');
   }
+  
+  const validItems = (data.items || []).filter(i => i.description && i.description.trim() !== '');
+  if (validItems.length === 0) {
+    throw new Error('Invoice must have at least one line item with a description');
+  }
 }
 
 function saveInvoice(data) {
@@ -243,6 +248,16 @@ function saveInvoice(data) {
           item.quantity, item.unit, item.rate, item.amount,
           item.gst_rate !== undefined && item.gst_rate !== null ? item.gst_rate : 5
         );
+      }
+    }
+
+    const prefixSetting = db.prepare("SELECT value FROM settings WHERE key = 'invoice_prefix'").get();
+    const prefix = prefixSetting ? prefixSetting.value : 'INV-';
+    if (invoiceData.invoice_no && invoiceData.invoice_no.startsWith(prefix)) {
+      const numPart = invoiceData.invoice_no.substring(prefix.length);
+      const num = parseInt(numPart, 10);
+      if (!isNaN(num)) {
+        db.prepare('UPDATE invoice_sequence SET last_number = MAX(last_number, ?) WHERE id = 1').run(num);
       }
     }
 
@@ -359,12 +374,9 @@ function getNextInvoiceNumber() {
   const prefixSetting = db.prepare("SELECT value FROM settings WHERE key = 'invoice_prefix'").get();
   const prefix = prefixSetting ? prefixSetting.value : 'INV-';
 
-  // Atomically increment and return in a transaction
-  const nextNum = db.transaction(() => {
-    db.prepare('UPDATE invoice_sequence SET last_number = last_number + 1 WHERE id = 1').run();
-    const row = db.prepare('SELECT last_number FROM invoice_sequence WHERE id = 1').get();
-    return row.last_number;
-  })();
+  // Read current last_number without incrementing it to avoid consuming numbers too early
+  const row = db.prepare('SELECT last_number FROM invoice_sequence WHERE id = 1').get();
+  const nextNum = row.last_number + 1;
 
   return prefix + String(nextNum).padStart(4, '0');
 }
@@ -376,6 +388,13 @@ function saveSetting(key, value) {
     INSERT INTO settings (key, value) VALUES (?, ?)
     ON CONFLICT(key) DO UPDATE SET value = excluded.value
   `).run(key, value);
+
+  if (key === 'invoice_start') {
+    const startNum = parseInt(value, 10);
+    if (!isNaN(startNum)) {
+      db.prepare('UPDATE invoice_sequence SET last_number = ? WHERE id = 1').run(startNum - 1);
+    }
+  }
 }
 
 function getSetting(key) {

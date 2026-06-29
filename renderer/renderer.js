@@ -109,25 +109,36 @@ function numberToIndianWords(amount) {
   return res + " Only";
 }
 
-// ─── Draft Store (in-memory, survives navigation but not app close) ───
+// ─── Draft Store (Persists across navigation and app restarts) ───
 window._invoiceDraft = null;
 window._formDirty = false;
 
 function saveDraft(formData) {
   window._invoiceDraft = formData;
+  localStorage.setItem('invoiceDraft', JSON.stringify(formData));
 }
 
 function loadDraft() {
+  if (window._invoiceDraft) return window._invoiceDraft;
+  const saved = localStorage.getItem('invoiceDraft');
+  if (saved) {
+    try {
+      window._invoiceDraft = JSON.parse(saved);
+    } catch (e) {
+      window._invoiceDraft = null;
+    }
+  }
   return window._invoiceDraft;
 }
 
 function clearDraft() {
   window._invoiceDraft = null;
   window._formDirty = false;
+  localStorage.removeItem('invoiceDraft');
 }
 
 function hasDraft() {
-  return window._invoiceDraft !== null;
+  return window._invoiceDraft !== null || localStorage.getItem('invoiceDraft') !== null;
 }
 
 // ─── Router ───

@@ -206,29 +206,36 @@ async function renderNewInvoice(container) {
     tr.querySelector(".item-qty").addEventListener("input", () => {
       calcRow(tr);
       window._formDirty = true;
+      if (!editingInvoiceId) saveDraft(collectData());
     });
     tr.querySelector(".item-rate").addEventListener("input", () => {
       calcRow(tr);
       window._formDirty = true;
+      if (!editingInvoiceId) saveDraft(collectData());
     });
     tr.querySelector(".item-gst-rate").addEventListener("change", () => {
       calcTotals();
       window._formDirty = true;
+      if (!editingInvoiceId) saveDraft(collectData());
     });
     tr.querySelector(".item-desc").addEventListener("input", () => {
       window._formDirty = true;
+      if (!editingInvoiceId) saveDraft(collectData());
     });
     tr.querySelector(".item-hsn").addEventListener("input", () => {
       window._formDirty = true;
+      if (!editingInvoiceId) saveDraft(collectData());
     });
     tr.querySelector(".item-unit").addEventListener("input", () => {
       window._formDirty = true;
+      if (!editingInvoiceId) saveDraft(collectData());
     });
     tr.querySelector(".remove-row").addEventListener("click", () => {
       tr.remove();
       reNumber();
       calcTotals();
       window._formDirty = true;
+      if (!editingInvoiceId) saveDraft(collectData());
     });
   }
 
@@ -323,14 +330,16 @@ async function renderNewInvoice(container) {
     addItemRow(null);
   }
 
-  // ─── Track form dirty state ───
-  // All inputs with class 'inv-track' set dirty on change
+  // ─── Track form dirty state & Auto-Save ───
+  // All inputs with class 'inv-track' set dirty on change and auto-save the draft
   container.querySelectorAll(".inv-track").forEach((el) => {
     el.addEventListener("input", () => {
       window._formDirty = true;
+      if (!editingInvoiceId) saveDraft(collectData());
     });
     el.addEventListener("change", () => {
       window._formDirty = true;
+      if (!editingInvoiceId) saveDraft(collectData());
     });
   });
 
