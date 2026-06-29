@@ -79,6 +79,14 @@ function initDatabase() {
       id          INTEGER PRIMARY KEY CHECK(id = 1),
       last_number INTEGER NOT NULL DEFAULT 0
     );
+
+    CREATE TABLE IF NOT EXISTS products (
+      id          INTEGER PRIMARY KEY AUTOINCREMENT,
+      description TEXT NOT NULL,
+      hsn_sac     TEXT,
+      rate        REAL,
+      gst_rate    REAL
+    );
   `);
 
   // ─── Migrations ───
@@ -183,11 +191,36 @@ function deleteBuyer(id) {
 }
 
 function getBuyers() {
-  return db.prepare('SELECT * FROM buyers ORDER BY name').all();
+  return db.prepare('SELECT * FROM buyers ORDER BY id DESC').all();
 }
 
 function getBuyerById(id) {
-  return db.prepare('SELECT * FROM buyers WHERE id = ?').get(id);
+  return db.prepare('SELECT * FROM buyers WHERE id = ?').get(id) || null;
+}
+
+// ─── Products Queries ───
+
+function saveProduct(data) {
+  const result = db.prepare(`
+    INSERT INTO products (description, hsn_sac, rate, gst_rate)
+    VALUES (?, ?, ?, ?)
+  `).run(data.description, data.hsn_sac, data.rate, data.gst_rate);
+  return result.lastInsertRowid;
+}
+
+function updateProduct(id, data) {
+  db.prepare(`
+    UPDATE products SET description = ?, hsn_sac = ?, rate = ?, gst_rate = ?
+    WHERE id = ?
+  `).run(data.description, data.hsn_sac, data.rate, data.gst_rate, id);
+}
+
+function deleteProduct(id) {
+  db.prepare('DELETE FROM products WHERE id = ?').run(id);
+}
+
+function getProducts() {
+  return db.prepare('SELECT * FROM products ORDER BY description ASC').all();
 }
 
 // ─── Invoice Queries ───
@@ -320,6 +353,16 @@ function deleteInvoice(id) {
   db.prepare('DELETE FROM invoices WHERE id = ?').run(id);
 }
 
+function checkDuplicateInvoice(invoiceNo, excludeId = null) {
+  if (excludeId) {
+    const row = db.prepare('SELECT id FROM invoices WHERE invoice_no = ? AND id != ?').get(invoiceNo, excludeId);
+    return !!row;
+  } else {
+    const row = db.prepare('SELECT id FROM invoices WHERE invoice_no = ?').get(invoiceNo);
+    return !!row;
+  }
+}
+
 function getInvoices(filters = {}) {
   let query = `
     SELECT i.*, b.name as buyer_name
@@ -342,9 +385,38 @@ function getInvoices(filters = {}) {
     params.push(filters.dateTo);
   }
 
-  query += ' ORDER BY i.created_at DESC LIMIT 50';
+  const limit = filters.limit ? parseInt(filters.limit, 10) : 50;
+  const offset = filters.offset ? parseInt(filters.offset, 10) : 0;
+  
+  query += ' ORDER BY i.created_at DESC LIMIT ? OFFSET ?';
+  params.push(limit, offset);
 
-  return db.prepare(query).all(...params);
+  const data = db.prepare(query).all(...params);
+
+  // Get total count for pagination
+  let countQuery = `
+    SELECT COUNT(*) as total
+    FROM invoices i
+    LEFT JOIN buyers b ON i.buyer_id = b.id
+    WHERE 1=1
+  `;
+  const countParams = [];
+  if (filters.search) {
+    countQuery += ` AND (i.invoice_no LIKE ? OR b.name LIKE ?)`;
+    countParams.push(`%${filters.search}%`, `%${filters.search}%`);
+  }
+  if (filters.dateFrom) {
+    countQuery += ` AND i.date >= ?`;
+    countParams.push(filters.dateFrom);
+  }
+  if (filters.dateTo) {
+    countQuery += ` AND i.date <= ?`;
+    countParams.push(filters.dateTo);
+  }
+  
+  const total = db.prepare(countQuery).get(...countParams).total;
+
+  return { data, total, limit, offset };
 }
 
 function getInvoiceById(id) {
@@ -427,11 +499,28 @@ function getDashboardStats() {
   ).get(firstOfMonth).total;
 
   const totalGst = db.prepare(
-    'SELECT COALESCE(SUM(cgst_amount + sgst_amount), 0) as total FROM invoices'
-  ).get().total;
+    'SELECT COALESCE(SUM(cgst_amount + sgst_amount), 0) as total FROM invoices WHERE date >= ?'
+  ).get(firstOfMonth).total;
 
   return { totalInvoices, monthRevenue, totalGst };
 }
+
+// ─── Reports ───
+
+function getGstr1Summary(monthStr) {
+  return db.prepare(`
+    SELECT
+      item.gst_rate,
+      SUM(item.amount) as taxable_value,
+      SUM(item.amount * (item.gst_rate / 100)) as total_gst
+    FROM invoices inv
+    JOIN invoice_items item ON inv.id = item.invoice_id
+    WHERE strftime('%Y-%m', inv.date) = ?
+    GROUP BY item.gst_rate
+    ORDER BY item.gst_rate
+  `).all(monthStr);
+}
+
 
 function closeDatabase() {
   if (db) {
@@ -452,9 +541,14 @@ module.exports = {
   deleteBuyer,
   getBuyers,
   getBuyerById,
+  saveProduct,
+  updateProduct,
+  deleteProduct,
+  getProducts,
   saveInvoice,
   updateInvoice,
   deleteInvoice,
+  checkDuplicateInvoice,
   getInvoices,
   getInvoiceById,
   getNextInvoiceNumber,
@@ -462,4 +556,5 @@ module.exports = {
   getSetting,
   getAllSettings,
   getDashboardStats,
+  getGstr1Summary,
 };

@@ -15,6 +15,9 @@ async function renderNewInvoice(container) {
   const buyers = buyersRes.success ? buyersRes.data : [];
   const sellerRes = await window.electronAPI.getSeller();
   const seller = sellerRes.success ? sellerRes.data : null;
+  const prodsRes = await window.electronAPI.getProducts();
+  const products = prodsRes.success ? prodsRes.data : [];
+  window._globalProducts = products;
   const today = new Date().toISOString().split("T")[0];
 
   let invoice = null;
@@ -54,7 +57,10 @@ async function renderNewInvoice(container) {
   }
   const invDate = v.date || today;
 
+  const productOptions = products.map(p => `<option value="${escapeHtml(p.description)}"></option>`).join("");
+
   container.innerHTML = `
+    <datalist id="product-datalist">${productOptions}</datalist>
     <div class="page-header">
       <div><h1 class="page-title">${title}</h1><p class="page-subtitle">${isEdit ? "Update invoice details" : draft ? "📝 Draft restored — continue where you left off" : "Fill in the details below"}</p></div>
     </div>
@@ -194,7 +200,7 @@ async function renderNewInvoice(container) {
       : DEFAULT_GST_RATE;
     tr.innerHTML = `
       <td><input type="text" value="${item ? item.sl_no : itemCount}" class="item-sl" readonly style="background:#f0f2f5;text-align:center;"></td>
-      <td><input type="text" value="${item ? escapeHtml(item.description || "") : ""}" class="item-desc" placeholder="Description"></td>
+      <td><input type="text" list="product-datalist" value="${item ? escapeHtml(item.description || "") : ""}" class="item-desc" placeholder="Description"></td>
       <td><input type="text" value="${item ? escapeHtml(item.hsn_sac || "") : ""}" class="item-hsn" placeholder="HSN/SAC"></td>
       <td><input type="number" value="${item ? item.quantity || "" : ""}" class="item-qty" step="any" placeholder="0"></td>
       <td><input type="text" value="${item ? escapeHtml(item.unit || "kgs") : "kgs"}" class="item-unit"></td>
@@ -218,7 +224,14 @@ async function renderNewInvoice(container) {
       window._formDirty = true;
       if (!editingInvoiceId) saveDraft(collectData());
     });
-    tr.querySelector(".item-desc").addEventListener("input", () => {
+    tr.querySelector(".item-desc").addEventListener("input", (e) => {
+      const val = e.target.value.trim();
+      const p = (window._globalProducts || []).find(x => x.description === val);
+      if (p) {
+        if (p.hsn_sac) tr.querySelector(".item-hsn").value = p.hsn_sac;
+        if (p.gst_rate) tr.querySelector(".item-gst-rate").value = p.gst_rate;
+        calcRow(tr);
+      }
       window._formDirty = true;
       if (!editingInvoiceId) saveDraft(collectData());
     });
@@ -425,6 +438,14 @@ async function renderNewInvoice(container) {
     let data = collectData();
     if (!data.invoice_no || !data.date)
       return showToast("Invoice No. and Date are required", "error");
+    
+    const isDup = await window.electronAPI.checkDuplicateInvoice(data.invoice_no, isEdit ? editingInvoiceId : null);
+    if (isDup) {
+      if (!confirm(`Invoice number "${data.invoice_no}" already exists! Do you still want to save?`)) {
+        return;
+      }
+    }
+
     data = await saveBuyerIfNeeded(data);
     const res = isEdit
       ? await window.electronAPI.updateInvoice(editingInvoiceId, data)
@@ -448,6 +469,14 @@ async function renderNewInvoice(container) {
       let data = collectData();
       if (!data.invoice_no || !data.date)
         return showToast("Invoice No. and Date are required", "error");
+      
+      const isDup = await window.electronAPI.checkDuplicateInvoice(data.invoice_no, null);
+      if (isDup) {
+        if (!confirm(`Invoice number "${data.invoice_no}" already exists! Do you still want to save?`)) {
+          return;
+        }
+      }
+
       data = await saveBuyerIfNeeded(data);
       const res = await window.electronAPI.saveInvoice(data);
       if (res.success) {

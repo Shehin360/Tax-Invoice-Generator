@@ -25,6 +25,15 @@ async function renderSettings(container) {
       </div>
     </div>
     <div class="card" style="margin-bottom:20px;">
+      <div class="card-header"><h3>🎨 Appearance</h3></div>
+      <div class="card-body">
+        <div style="display:flex;align-items:center;gap:16px;margin-bottom:20px;">
+          <label class="form-label" style="margin:0;">Dark Mode (Futuristic)</label>
+          <label class="toggle"><input type="checkbox" id="set-dark-mode" ${settings.theme === 'dark' ? 'checked' : ''}><span class="toggle-slider"></span></label>
+        </div>
+      </div>
+    </div>
+    <div class="card" style="margin-bottom:20px;">
       <div class="card-header"><h3>🔢 Invoice Numbering</h3></div>
       <div class="card-body">
         <div class="form-row">
@@ -60,6 +69,16 @@ async function renderSettings(container) {
     if (!data.name) return showToast('Business name is required', 'error');
     const r = await window.electronAPI.saveSeller(data);
     r.success ? showToast('Profile saved!') : showToast(r.error, 'error');
+  });
+
+  document.getElementById('set-dark-mode').addEventListener('change', async (e) => {
+    const isDark = e.target.checked;
+    await window.electronAPI.saveSetting('theme', isDark ? 'dark' : 'light');
+    if (isDark) {
+      document.documentElement.setAttribute('data-theme', 'dark');
+    } else {
+      document.documentElement.removeAttribute('data-theme');
+    }
   });
 
   document.getElementById('set-save-numbering').addEventListener('click', async () => {

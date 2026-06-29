@@ -368,3 +368,56 @@ table tbody tr:hover { background: rgba(240,165,0,0.03); }
   .stats-grid { grid-template-columns: 1fr; }
   .form-row, .form-row-3 { grid-template-columns: 1fr; }
 }
+
+/* ─── Dark Mode (Futuristic) ─── */
+[data-theme="dark"] {
+  --app-bg: #0b0f19;
+  --card-bg: #151b2b;
+  --text-primary: #e2e8f0;
+  --text-secondary: #94a3b8;
+  --text-muted: #64748b;
+  --border: #1e293b;
+  --sidebar-bg: #060913;
+  --sidebar-hover: #0f172a;
+  --sidebar-active: #1e293b;
+  --shadow-sm: 0 1px 3px rgba(0,0,0,0.3);
+  --shadow: 0 4px 12px rgba(0,0,0,0.5);
+  --shadow-lg: 0 12px 40px rgba(0,0,0,0.6);
+  --primary-light: rgba(240, 165, 0, 0.15);
+}
+[data-theme="dark"] .table th {
+  background: var(--sidebar-hover);
+  color: #cbd5e1;
+}
+[data-theme="dark"] .items-table th {
+  background: var(--sidebar-hover);
+}
+[data-theme="dark"] .form-input, 
+[data-theme="dark"] .form-select, 
+[data-theme="dark"] .form-textarea {
+  background: #0f172a;
+  border-color: #334155;
+  color: #f8fafc;
+}
+[data-theme="dark"] .form-input:focus, 
+[data-theme="dark"] .form-select:focus, 
+[data-theme="dark"] .form-textarea:focus {
+  border-color: var(--primary);
+  background: #151b2b;
+}
+[data-theme="dark"] .items-table input.item-sl, 
+[data-theme="dark"] .items-table input.item-amt {
+  background: #1e293b !important;
+  color: #e2e8f0 !important;
+}
+[data-theme="dark"] .card {
+  box-shadow: 0 4px 16px rgba(0,0,0,0.4);
+}
+[data-theme="dark"] .btn-secondary {
+  background: #1e293b;
+  border-color: #334155;
+  color: #e2e8f0;
+}
+[data-theme="dark"] .btn-secondary:hover {
+  background: #334155;
+}

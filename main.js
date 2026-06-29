@@ -1,7 +1,8 @@
-const { app, BrowserWindow, ipcMain, dialog, shell } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, shell, Menu } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const db = require('./database/db');
+const logger = require('./logger');
 
 let mainWindow;
 
@@ -56,8 +57,76 @@ function createWindow() {
 }
 
 app.whenReady().then(() => {
+  logger.info('Application starting...');
   db.initDatabase();
   createWindow();
+
+  // Create native menu
+  const template = [
+    ...(process.platform === 'darwin' ? [{
+      label: app.name,
+      submenu: [
+        { role: 'about' },
+        { type: 'separator' },
+        { role: 'services' },
+        { type: 'separator' },
+        { role: 'hide' },
+        { role: 'hideOthers' },
+        { role: 'unhide' },
+        { type: 'separator' },
+        { role: 'quit' }
+      ]
+    }] : []),
+    {
+      label: 'File',
+      submenu: [
+        { role: 'quit' }
+      ]
+    },
+    {
+      label: 'Edit',
+      submenu: [
+        { role: 'undo' },
+        { role: 'redo' },
+        { type: 'separator' },
+        { role: 'cut' },
+        { role: 'copy' },
+        { role: 'paste' }
+      ]
+    },
+    {
+      label: 'View',
+      submenu: [
+        { role: 'reload' },
+        { role: 'forceReload' },
+        { role: 'toggleDevTools' },
+        { type: 'separator' },
+        { role: 'resetZoom' },
+        { role: 'zoomIn' },
+        { role: 'zoomOut' },
+        { type: 'separator' },
+        { role: 'togglefullscreen' }
+      ]
+    },
+    {
+      label: 'Help',
+      submenu: [
+        {
+          label: 'About',
+          click: async () => {
+            dialog.showMessageBox({
+              type: 'info',
+              title: 'About',
+              message: 'GST Invoice Generator',
+              detail: 'Version 1.0.0\nDeveloped by the coolest developer: Shehin LOL😜'
+            });
+          }
+        }
+      ]
+    }
+  ];
+  const menu = Menu.buildFromTemplate(template);
+  Menu.setApplicationMenu(menu);
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
@@ -100,151 +169,54 @@ app.on('window-all-closed', () => {
 
 // ─── IPC Handlers ───
 
-// Seller
-ipcMain.handle('save-seller', async (event, data) => {
-  try {
-    return { success: true, id: db.saveSeller(data) };
-  } catch (err) {
-    return { success: false, error: err.message };
-  }
-});
+function ipcHandler(channel, fn) {
+  ipcMain.handle(channel, async (event, ...args) => {
+    try {
+      const result = await fn(...args);
+      return { success: true, data: result !== undefined ? result : null, id: result };
+    } catch (err) {
+      logger.error(`IPC error [${channel}]:`, err);
+      return { success: false, error: err.message };
+    }
+  });
+}
 
-ipcMain.handle('get-seller', async () => {
-  try {
-    return { success: true, data: db.getSeller() };
-  } catch (err) {
-    return { success: false, error: err.message };
-  }
-});
+// Seller
+ipcHandler('save-seller', (data) => db.saveSeller(data));
+ipcHandler('get-seller', () => db.getSeller());
 
 // Buyers
-ipcMain.handle('save-buyer', async (event, data) => {
-  try {
-    return { success: true, id: db.saveBuyer(data) };
-  } catch (err) {
-    return { success: false, error: err.message };
-  }
-});
+ipcHandler('save-buyer', (data) => db.saveBuyer(data));
+ipcHandler('update-buyer', (id, data) => { db.updateBuyer(id, data); });
+ipcHandler('delete-buyer', (id) => { db.deleteBuyer(id); });
+ipcHandler('get-buyers', () => db.getBuyers());
+ipcHandler('get-buyer-by-id', (id) => db.getBuyerById(id));
 
-ipcMain.handle('update-buyer', async (event, id, data) => {
-  try {
-    db.updateBuyer(id, data);
-    return { success: true };
-  } catch (err) {
-    return { success: false, error: err.message };
-  }
-});
-
-ipcMain.handle('delete-buyer', async (event, id) => {
-  try {
-    db.deleteBuyer(id);
-    return { success: true };
-  } catch (err) {
-    return { success: false, error: err.message };
-  }
-});
-
-ipcMain.handle('get-buyers', async () => {
-  try {
-    return { success: true, data: db.getBuyers() };
-  } catch (err) {
-    return { success: false, error: err.message };
-  }
-});
-
-ipcMain.handle('get-buyer-by-id', async (event, id) => {
-  try {
-    return { success: true, data: db.getBuyerById(id) };
-  } catch (err) {
-    return { success: false, error: err.message };
-  }
-});
+// Products
+ipcHandler('save-product', (data) => db.saveProduct(data));
+ipcHandler('update-product', (id, data) => { db.updateProduct(id, data); });
+ipcHandler('delete-product', (id) => { db.deleteProduct(id); });
+ipcHandler('get-products', () => db.getProducts());
 
 // Invoices
-ipcMain.handle('save-invoice', async (event, data) => {
-  try {
-    return { success: true, id: db.saveInvoice(data) };
-  } catch (err) {
-    return { success: false, error: err.message };
-  }
-});
-
-ipcMain.handle('update-invoice', async (event, id, data) => {
-  try {
-    db.updateInvoice(id, data);
-    return { success: true };
-  } catch (err) {
-    return { success: false, error: err.message };
-  }
-});
-
-ipcMain.handle('delete-invoice', async (event, id) => {
-  try {
-    db.deleteInvoice(id);
-    return { success: true };
-  } catch (err) {
-    return { success: false, error: err.message };
-  }
-});
-
-ipcMain.handle('get-invoices', async (event, filters) => {
-  try {
-    return { success: true, data: db.getInvoices(filters) };
-  } catch (err) {
-    return { success: false, error: err.message };
-  }
-});
-
-ipcMain.handle('get-invoice-by-id', async (event, id) => {
-  try {
-    return { success: true, data: db.getInvoiceById(id) };
-  } catch (err) {
-    return { success: false, error: err.message };
-  }
-});
-
-ipcMain.handle('get-next-invoice-number', async () => {
-  try {
-    return { success: true, data: db.getNextInvoiceNumber() };
-  } catch (err) {
-    return { success: false, error: err.message };
-  }
-});
+ipcHandler('save-invoice', (data) => db.saveInvoice(data));
+ipcHandler('update-invoice', (id, data) => { db.updateInvoice(id, data); });
+ipcHandler('delete-invoice', (id) => { db.deleteInvoice(id); });
+ipcHandler('get-invoices', (filters) => db.getInvoices(filters));
+ipcHandler('get-invoice-by-id', (id) => db.getInvoiceById(id));
+ipcHandler('get-next-invoice-number', () => db.getNextInvoiceNumber());
+ipcHandler('check-duplicate-invoice', (invoiceNo, excludeId) => db.checkDuplicateInvoice(invoiceNo, excludeId));
 
 // Dashboard
-ipcMain.handle('get-dashboard-stats', async () => {
-  try {
-    return { success: true, data: db.getDashboardStats() };
-  } catch (err) {
-    return { success: false, error: err.message };
-  }
-});
+ipcHandler('get-dashboard-stats', () => db.getDashboardStats());
+
+// Reports
+ipcHandler('get-gstr1-summary', (month) => db.getGstr1Summary(month));
 
 // Settings
-ipcMain.handle('save-setting', async (event, key, value) => {
-  try {
-    db.saveSetting(key, value);
-    return { success: true };
-  } catch (err) {
-    return { success: false, error: err.message };
-  }
-});
-
-ipcMain.handle('get-setting', async (event, key) => {
-  try {
-    return { success: true, data: db.getSetting(key) };
-  } catch (err) {
-    return { success: false, error: err.message };
-  }
-});
-
-ipcMain.handle('get-all-settings', async () => {
-  try {
-    return { success: true, data: db.getAllSettings() };
-  } catch (err) {
-    return { success: false, error: err.message };
-  }
-});
+ipcHandler('save-setting', (key, value) => { db.saveSetting(key, value); });
+ipcHandler('get-setting', (key) => db.getSetting(key));
+ipcHandler('get-all-settings', () => db.getAllSettings());
 
 // PDF Generation
 ipcMain.handle('generate-pdf', async (event, invoiceId) => {
@@ -449,11 +421,13 @@ function numberToIndianWords(amount) {
   let n = rupees;
 
   if (Math.floor(n / 10000000) > 0) {
-    parts.push(threeDigits(Math.floor(n / 10000000)) + ' Crore');
+    const cr = Math.floor(n / 10000000);
+    parts.push(threeDigits(cr) + (cr > 1 ? ' Crores' : ' Crore'));
     n %= 10000000;
   }
   if (Math.floor(n / 100000) > 0) {
-    parts.push(twoDigits(Math.floor(n / 100000)) + ' Lakh');
+    const l = Math.floor(n / 100000);
+    parts.push(twoDigits(l) + (l > 1 ? ' Lakhs' : ' Lakh'));
     n %= 100000;
   }
   if (Math.floor(n / 1000) > 0) {
@@ -464,8 +438,15 @@ function numberToIndianWords(amount) {
     parts.push(threeDigits(n));
   }
 
-  let result = 'INR ' + parts.join(' ');
-  if (paise > 0) result += ' and ' + twoDigits(paise) + ' Paise';
+  let result = 'INR';
+  if (parts.length > 0) {
+    result += ' ' + parts.join(' ');
+  } else if (paise === 0) {
+    result += ' Zero';
+  }
+  if (paise > 0) {
+    result += (parts.length > 0 ? ' and ' : ' ') + twoDigits(paise) + ' Paise';
+  }
   result += ' Only';
   return result;
 }

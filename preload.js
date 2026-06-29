@@ -19,9 +19,17 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getInvoices: (filters) => ipcRenderer.invoke('get-invoices', filters),
   getInvoiceById: (id) => ipcRenderer.invoke('get-invoice-by-id', id),
   getNextInvoiceNumber: () => ipcRenderer.invoke('get-next-invoice-number'),
+  checkDuplicateInvoice: (invoiceNo, excludeId) => ipcRenderer.invoke('check-duplicate-invoice', invoiceNo, excludeId),
 
-  // Dashboard
+  // Products
+  saveProduct: (data) => ipcRenderer.invoke('save-product', data),
+  updateProduct: (id, data) => ipcRenderer.invoke('update-product', id, data),
+  deleteProduct: (id) => ipcRenderer.invoke('delete-product', id),
+  getProducts: () => ipcRenderer.invoke('get-products'),
+
+  // Dashboard & Reports
   getDashboardStats: () => ipcRenderer.invoke('get-dashboard-stats'),
+  getGstr1Summary: (month) => ipcRenderer.invoke('get-gstr1-summary', month),
 
   // Settings
   saveSetting: (key, value) => ipcRenderer.invoke('save-setting', key, value),

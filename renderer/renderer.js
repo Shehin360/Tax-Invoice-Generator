@@ -92,11 +92,13 @@ function numberToIndianWords(amount) {
   let parts = [],
     n = r;
   if (Math.floor(n / 10000000) > 0) {
-    parts.push(th(Math.floor(n / 10000000)) + " Crore");
+    const cr = Math.floor(n / 10000000);
+    parts.push(th(cr) + (cr > 1 ? " Crores" : " Crore"));
     n %= 10000000;
   }
   if (Math.floor(n / 100000) > 0) {
-    parts.push(tw(Math.floor(n / 100000)) + " Lakh");
+    const l = Math.floor(n / 100000);
+    parts.push(tw(l) + (l > 1 ? " Lakhs" : " Lakh"));
     n %= 100000;
   }
   if (Math.floor(n / 1000) > 0) {
@@ -104,8 +106,16 @@ function numberToIndianWords(amount) {
     n %= 1000;
   }
   if (n > 0) parts.push(th(n));
-  let res = "INR " + parts.join(" ");
-  if (p > 0) res += " and " + tw(p) + " Paise";
+  
+  let res = "INR";
+  if (parts.length > 0) {
+    res += " " + parts.join(" ");
+  } else if (p === 0) {
+    res += " Zero";
+  }
+  if (p > 0) {
+    res += (parts.length > 0 ? " and " : " ") + tw(p) + " Paise";
+  }
   return res + " Only";
 }
 
@@ -230,6 +240,12 @@ async function loadPage(page) {
     case "buyers":
       await renderBuyers(main);
       break;
+    case "products":
+      await renderProducts(main);
+      break;
+    case "reports":
+      await renderReports(main);
+      break;
     case "settings":
       await renderSettings(main);
       break;
@@ -274,4 +290,10 @@ document.addEventListener('keydown', (e) => {
 });
 
 // ─── Init ───
-navigateTo("dashboard");
+(async () => {
+  const settingsRes = await window.electronAPI.getAllSettings();
+  if (settingsRes.success && settingsRes.data && settingsRes.data.theme === 'dark') {
+    document.documentElement.setAttribute('data-theme', 'dark');
+  }
+  navigateTo("dashboard");
+})();

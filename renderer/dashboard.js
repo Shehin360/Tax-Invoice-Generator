@@ -1,11 +1,13 @@
 // ─── Dashboard Page ───
 let _searchDebounceTimer = null;
+let _currentPage = 1;
+const _itemsPerPage = 10;
 
 async function renderDashboard(container) {
   const statsRes = await window.electronAPI.getDashboardStats();
   const stats = statsRes.success ? statsRes.data : { totalInvoices: 0, monthRevenue: 0, totalGst: 0 };
-  const invRes = await window.electronAPI.getInvoices({});
-  const invoices = invRes.success ? invRes.data : [];
+  const invRes = await window.electronAPI.getInvoices({ limit: _itemsPerPage, offset: 0 });
+  const invoicesData = invRes.success ? invRes.data : { data: [], total: 0 };
 
   container.innerHTML = `
     <div class="page-header">
@@ -51,11 +53,18 @@ async function renderDashboard(container) {
           <thead><tr><th>Invoice No.</th><th>Date</th><th>Buyer</th><th>Total</th><th>Actions</th></tr></thead>
           <tbody id="dash-invoice-list"></tbody>
         </table>
+        <div id="dash-pagination" style="display:flex; justify-content:space-between; align-items:center; margin-top:16px;">
+          <div id="dash-page-info" style="color:var(--text-muted); font-size:14px;"></div>
+          <div style="display:flex; gap:8px;">
+            <button class="btn btn-secondary btn-sm" id="btn-prev-page">Previous</button>
+            <button class="btn btn-secondary btn-sm" id="btn-next-page">Next</button>
+          </div>
+        </div>
       </div>
     </div>`;
 
   // Render the initial invoice table
-  renderInvoiceTable(invoices);
+  renderInvoiceTable(invoicesData.data, invoicesData.total);
 
   // ─── Event Listeners ───
   document.getElementById('dash-new-invoice').addEventListener('click', () => navigateTo('new-invoice'));
@@ -68,17 +77,36 @@ async function renderDashboard(container) {
 
   // Enter key in search
   document.getElementById('dash-search').addEventListener('keyup', (e) => {
-    if (e.key === 'Enter') applyDashboardFilters();
+    if (e.key === 'Enter') {
+      _currentPage = 1;
+      applyDashboardFilters();
+    }
   });
 
   // Filter button
-  document.getElementById('dash-filter').addEventListener('click', () => applyDashboardFilters());
+  document.getElementById('dash-filter').addEventListener('click', () => {
+    _currentPage = 1;
+    applyDashboardFilters();
+  });
 
   // Clear button
   document.getElementById('dash-clear').addEventListener('click', () => {
     document.getElementById('dash-search').value = '';
     document.getElementById('dash-date-from').value = '';
     document.getElementById('dash-date-to').value = '';
+    _currentPage = 1;
+    applyDashboardFilters();
+  });
+
+  // Pagination buttons
+  document.getElementById('btn-prev-page').addEventListener('click', () => {
+    if (_currentPage > 1) {
+      _currentPage--;
+      applyDashboardFilters();
+    }
+  });
+  document.getElementById('btn-next-page').addEventListener('click', () => {
+    _currentPage++;
     applyDashboardFilters();
   });
 }
@@ -91,10 +119,12 @@ async function applyDashboardFilters() {
     search: document.getElementById('dash-search').value,
     dateFrom: document.getElementById('dash-date-from').value,
     dateTo: document.getElementById('dash-date-to').value,
+    limit: _itemsPerPage,
+    offset: (_currentPage - 1) * _itemsPerPage
   };
   const r = await window.electronAPI.getInvoices(filters);
   if (r.success) {
-    renderInvoiceTable(r.data);
+    renderInvoiceTable(r.data.data, r.data.total);
   }
 }
 
@@ -102,12 +132,18 @@ async function applyDashboardFilters() {
  * Render invoice rows into #dash-invoice-list tbody.
  * Only updates the table body — preserves stats cards, search inputs, and everything else.
  */
-function renderInvoiceTable(invoices) {
+function renderInvoiceTable(invoices, totalCount) {
   const tbody = document.getElementById('dash-invoice-list');
+  const pageInfo = document.getElementById('dash-page-info');
+  const btnPrev = document.getElementById('btn-prev-page');
+  const btnNext = document.getElementById('btn-next-page');
   if (!tbody) return;
 
   if (invoices.length === 0) {
     tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;padding:40px;color:var(--text-secondary);">No invoices found</td></tr>';
+    if (pageInfo) pageInfo.textContent = 'Showing 0-0 of 0';
+    if (btnPrev) btnPrev.disabled = true;
+    if (btnNext) btnNext.disabled = true;
     return;
   }
 
@@ -125,6 +161,18 @@ function renderInvoiceTable(invoices) {
       </div></td>
     </tr>
   `).join('');
+
+  if (pageInfo) {
+    const start = (_currentPage - 1) * _itemsPerPage + 1;
+    const end = Math.min(_currentPage * _itemsPerPage, totalCount);
+    pageInfo.textContent = `Showing ${start}-${end} of ${totalCount}`;
+  }
+  if (btnPrev) {
+    btnPrev.disabled = _currentPage === 1;
+  }
+  if (btnNext) {
+    btnNext.disabled = _currentPage * _itemsPerPage >= totalCount;
+  }
 }
 
 /**
