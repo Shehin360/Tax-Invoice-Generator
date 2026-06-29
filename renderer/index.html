@@ -90,6 +90,31 @@
     </div>
   </div>
 
+  <!-- Draft Confirmation Modal -->
+  <div class="modal-overlay" id="draft-modal" style="display:none;">
+    <div class="modal-content draft-modal-content">
+      <div class="modal-header">
+        <h3>⚠️ Unsaved Changes</h3>
+      </div>
+      <div class="modal-body" style="padding:24px;">
+        <p style="font-size:14px;color:var(--text-secondary);margin-bottom:24px;line-height:1.6;">
+          You have unsaved changes in your invoice form. What would you like to do?
+        </p>
+        <div class="draft-modal-actions">
+          <button class="btn btn-primary" id="draft-save">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+            Save as Draft
+          </button>
+          <button class="btn btn-danger" id="draft-discard" style="background:var(--danger);color:#fff;">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg>
+            Discard
+          </button>
+          <button class="btn btn-secondary" id="draft-cancel">Cancel</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <script src="dashboard.js"></script>
   <script src="invoice.js"></script>
   <script src="buyers.js"></script>

@@ -18,10 +18,10 @@ async function renderBuyers(container) {
           <tbody id="buyers-list">
             ${buyers.length === 0 ? '<tr><td colspan="5" style="text-align:center;padding:40px;color:var(--text-secondary);">No buyers saved yet</td></tr>' : buyers.map(b => `
               <tr>
-                <td><strong>${b.name}</strong><br><small style="color:var(--text-secondary);">${b.address || ''}</small></td>
-                <td>${b.gstin || '—'}</td>
-                <td>${b.state_name || '—'}</td>
-                <td>${b.state_code || '—'}</td>
+                <td><strong>${escapeHtml(b.name)}</strong><br><small style="color:var(--text-secondary);">${escapeHtml(b.address)}</small></td>
+                <td>${escapeHtml(b.gstin) || '—'}</td>
+                <td>${escapeHtml(b.state_name) || '—'}</td>
+                <td>${escapeHtml(b.state_code) || '—'}</td>
                 <td><div class="actions-cell">
                   <button class="btn btn-icon btn-sm" onclick="editBuyer(${b.id})" title="Edit"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button>
                   <button class="btn btn-icon btn-sm btn-danger" onclick="deleteBuyerConfirm(${b.id})" title="Delete"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg></button>
@@ -37,10 +37,10 @@ async function renderBuyers(container) {
         <div class="modal-body" style="padding:24px;">
           <div class="form-group"><label class="form-label">Name *</label><input type="text" class="form-input" id="bm-name"></div>
           <div class="form-group"><label class="form-label">Address</label><textarea class="form-textarea" id="bm-address" rows="2"></textarea></div>
-          <div class="form-group"><label class="form-label">GSTIN</label><input type="text" class="form-input" id="bm-gstin"></div>
+          <div class="form-group"><label class="form-label">GSTIN</label><input type="text" class="form-input" id="bm-gstin" maxlength="15" placeholder="e.g. 27AAAAA0000A1Z5"></div>
           <div class="form-row">
             <div class="form-group"><label class="form-label">State</label><input type="text" class="form-input" id="bm-state"></div>
-            <div class="form-group"><label class="form-label">State Code</label><input type="text" class="form-input" id="bm-code"></div>
+            <div class="form-group"><label class="form-label">State Code</label><input type="text" class="form-input" id="bm-code" maxlength="2"></div>
           </div>
           <div style="display:flex;gap:12px;justify-content:flex-end;margin-top:20px;">
             <button class="btn btn-secondary" id="bm-cancel">Cancel</button>
@@ -63,8 +63,13 @@ async function renderBuyers(container) {
   document.getElementById('bm-cancel').addEventListener('click', closeModal);
 
   document.getElementById('bm-save').addEventListener('click', async () => {
-    const data = { name: document.getElementById('bm-name').value, address: document.getElementById('bm-address').value, gstin: document.getElementById('bm-gstin').value, state_name: document.getElementById('bm-state').value, state_code: document.getElementById('bm-code').value };
+    const data = { name: document.getElementById('bm-name').value.trim(), address: document.getElementById('bm-address').value.trim(), gstin: document.getElementById('bm-gstin').value.trim().toUpperCase(), state_name: document.getElementById('bm-state').value.trim(), state_code: document.getElementById('bm-code').value.trim() };
     if (!data.name) return showToast('Name is required', 'error');
+    // Validate GSTIN format if provided (15-char alphanumeric)
+    if (data.gstin && !/^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[A-Z0-9]{1}[Z]{1}[A-Z0-9]{1}$/.test(data.gstin)) {
+      showToast('GSTIN format looks invalid — please verify', 'info');
+      // Don't block — some buyers may have unusual GSTINs
+    }
     const res = editId ? await window.electronAPI.updateBuyer(editId, data) : await window.electronAPI.saveBuyer(data);
     if (res.success) { showToast(editId ? 'Buyer updated!' : 'Buyer added!'); closeModal(); navigateTo('buyers'); }
     else showToast(res.error, 'error');

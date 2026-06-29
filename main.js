@@ -51,9 +51,13 @@ app.on('window-all-closed', () => {
     const backupPath = db.getSetting('backup_path');
     if (autoBackup === 'true' && backupPath) {
       const dbPath = db.getDbPath();
-      const date = new Date().toISOString().split('T')[0];
-      const dest = path.join(backupPath, `invoices_backup_${date}.db`);
-      fs.copyFileSync(dbPath, dest);
+      if (fs.existsSync(backupPath) && fs.statSync(backupPath).isDirectory()) {
+        const date = new Date().toISOString().split('T')[0];
+        const dest = path.join(backupPath, `invoices_backup_${date}.db`);
+        fs.copyFileSync(dbPath, dest);
+      } else {
+        console.error('Auto-backup skipped: backup path does not exist or is not a directory:', backupPath);
+      }
     }
   } catch (e) {
     console.error('Auto-backup failed:', e);
@@ -214,6 +218,7 @@ ipcMain.handle('get-all-settings', async () => {
 
 // PDF Generation
 ipcMain.handle('generate-pdf', async (event, invoiceId) => {
+  let pdfWindow = null;
   try {
     const invoice = db.getInvoiceById(invoiceId);
     if (!invoice) {
@@ -228,7 +233,7 @@ ipcMain.handle('generate-pdf', async (event, invoiceId) => {
     html = populateTemplate(html, invoice);
 
     // Create hidden window for PDF generation
-    const pdfWindow = new BrowserWindow({
+    pdfWindow = new BrowserWindow({
       width: 794,  // A4 width at 96 DPI
       height: 1123, // A4 height at 96 DPI
       show: false,
@@ -249,12 +254,11 @@ ipcMain.handle('generate-pdf', async (event, invoiceId) => {
       margins: { top: 0.2, bottom: 0.2, left: 0.2, right: 0.2 },
     });
 
-    pdfWindow.close();
-
-    // Show save dialog
+    // Show save dialog — filename format: Invoice_no.INV-XXXX.pdf
+    const safeInvoiceNo = (invoice.invoice_no || 'unknown').replace(/[<>:"/\\|?*]/g, '_');
     const { canceled, filePath } = await dialog.showSaveDialog(mainWindow, {
       title: 'Save Invoice PDF',
-      defaultPath: path.join(app.getPath('documents'), `${invoice.invoice_no}.pdf`),
+      defaultPath: path.join(app.getPath('documents'), `Invoice_no.${safeInvoiceNo}.pdf`),
       filters: [{ name: 'PDF Files', extensions: ['pdf'] }],
     });
 
@@ -268,6 +272,11 @@ ipcMain.handle('generate-pdf', async (event, invoiceId) => {
     return { success: true, path: filePath };
   } catch (err) {
     return { success: false, error: err.message };
+  } finally {
+    // Always close the PDF window to prevent leaked BrowserWindows
+    if (pdfWindow && !pdfWindow.isDestroyed()) {
+      pdfWindow.close();
+    }
   }
 });
 
@@ -288,9 +297,22 @@ ipcMain.handle('backup-database', async () => {
       targetDir = filePaths[0];
     }
 
+    // Validate backup path
+    if (!fs.existsSync(targetDir) || !fs.statSync(targetDir).isDirectory()) {
+      return { success: false, error: 'Backup path does not exist or is not a directory' };
+    }
+
     const dbPath = db.getDbPath();
     const date = new Date().toISOString().split('T')[0];
     const dest = path.join(targetDir, `invoices_backup_${date}.db`);
+
+    // Verify destination is within the target directory (prevent path traversal)
+    const resolvedDest = path.resolve(dest);
+    const resolvedDir = path.resolve(targetDir);
+    if (!resolvedDest.startsWith(resolvedDir)) {
+      return { success: false, error: 'Invalid backup path' };
+    }
+
     fs.copyFileSync(dbPath, dest);
 
     return { success: true, path: dest };
@@ -434,12 +456,8 @@ function populateTemplate(html, invoice) {
     '{{BUYER_STATE}}': invoice.buyer_state_name || '',
     '{{BUYER_STATE_CODE}}': invoice.buyer_state_code || '',
     '{{TAXABLE_VALUE}}': formatIndianNumber(invoice.taxable_value),
-    '{{CGST_AMOUNT}}': formatIndianNumber(invoice.cgst_amount),
-    '{{SGST_AMOUNT}}': formatIndianNumber(invoice.sgst_amount),
     '{{TOTAL_AMOUNT}}': formatIndianNumber(invoice.total_amount),
-    '{{TOTAL_TAX}}': formatIndianNumber((invoice.cgst_amount || 0) + (invoice.sgst_amount || 0)),
     '{{AMOUNT_IN_WORDS}}': numberToIndianWords(invoice.total_amount || 0),
-    '{{TAX_IN_WORDS}}': numberToIndianWords((invoice.cgst_amount || 0) + (invoice.sgst_amount || 0)),
   };
 
   for (const [key, value] of Object.entries(replacements)) {
@@ -450,10 +468,16 @@ function populateTemplate(html, invoice) {
   let itemRows = '';
   let totalQty = 0;
   let totalQtyUnit = 'kgs';
-  const hsnMap = {};
+  const hsnMap = {}; // { hsn: { taxable, gst_rate } }
+
+  // Group tax amounts by GST rate for the tax rows and HSN table
+  const gstRateGroups = {}; // { rate: { cgst, sgst } }
 
   if (invoice.items && invoice.items.length > 0) {
     for (const item of invoice.items) {
+      const gstRate = item.gst_rate !== undefined && item.gst_rate !== null ? item.gst_rate : 5;
+      const halfRate = (gstRate / 2);
+
       itemRows += `
         <tr>
           <td class="center">${item.sl_no}</td>
@@ -467,52 +491,80 @@ function populateTemplate(html, invoice) {
       totalQty += (item.quantity || 0);
       totalQtyUnit = item.unit || 'kgs';
 
+      // Collect GST by rate
+      if (!gstRateGroups[gstRate]) {
+        gstRateGroups[gstRate] = { cgst: 0, sgst: 0 };
+      }
+      gstRateGroups[gstRate].cgst += (item.amount || 0) * halfRate / 100;
+      gstRateGroups[gstRate].sgst += (item.amount || 0) * halfRate / 100;
+
       // Collect HSN data for tax table
       if (item.hsn_sac) {
-        if (!hsnMap[item.hsn_sac]) {
-          hsnMap[item.hsn_sac] = 0;
+        const hsnKey = `${item.hsn_sac}_${gstRate}`;
+        if (!hsnMap[hsnKey]) {
+          hsnMap[hsnKey] = { hsn: item.hsn_sac, taxable: 0, gst_rate: gstRate };
         }
-        hsnMap[item.hsn_sac] += (item.amount || 0);
+        hsnMap[hsnKey].taxable += (item.amount || 0);
       }
     }
   }
 
-  // Add CGST and SGST rows inside line items
-  itemRows += `
-    <tr class="tax-row">
-      <td class="center"></td>
-      <td class="right"><em>CGST @ 2.5%</em></td>
-      <td class="center"></td>
-      <td class="right"></td>
-      <td class="right"></td>
-      <td class="right">${formatIndianNumber(invoice.cgst_amount)}</td>
-    </tr>
-    <tr class="tax-row">
-      <td class="center"></td>
-      <td class="right"><em>SGST @ 2.5%</em></td>
-      <td class="center"></td>
-      <td class="right"></td>
-      <td class="right"></td>
-      <td class="right">${formatIndianNumber(invoice.sgst_amount)}</td>
-    </tr>
-  `;
+  // Add tax rows for each GST rate group (sorted by rate)
+  const sortedRates = Object.keys(gstRateGroups).sort((a, b) => parseFloat(a) - parseFloat(b));
+  for (const rate of sortedRates) {
+    const r = parseFloat(rate);
+    if (r === 0) continue; // No tax rows for 0% GST
+    const halfRate = (r / 2).toFixed(1).replace(/\.0$/, '');
+    itemRows += `
+      <tr class="tax-row">
+        <td class="center"></td>
+        <td class="right"><em>CGST @ ${halfRate}%</em></td>
+        <td class="center"></td>
+        <td class="right"></td>
+        <td class="right"></td>
+        <td class="right">${formatIndianNumber(gstRateGroups[rate].cgst)}</td>
+      </tr>
+      <tr class="tax-row">
+        <td class="center"></td>
+        <td class="right"><em>SGST @ ${halfRate}%</em></td>
+        <td class="center"></td>
+        <td class="right"></td>
+        <td class="right"></td>
+        <td class="right">${formatIndianNumber(gstRateGroups[rate].sgst)}</td>
+      </tr>
+    `;
+  }
 
   html = html.replace('{{ITEM_ROWS}}', itemRows);
   html = html.replace('{{TOTAL_QTY}}', `${totalQty} ${totalQtyUnit}`);
 
+  // Calculate totals for template
+  let totalCgst = 0, totalSgst = 0;
+  for (const grp of Object.values(gstRateGroups)) {
+    totalCgst += grp.cgst;
+    totalSgst += grp.sgst;
+  }
+  const totalTaxAmt = totalCgst + totalSgst;
+
+  html = html.split('{{CGST_AMOUNT}}').join(formatIndianNumber(totalCgst));
+  html = html.split('{{SGST_AMOUNT}}').join(formatIndianNumber(totalSgst));
+  html = html.split('{{TOTAL_TAX}}').join(formatIndianNumber(totalTaxAmt));
+  html = html.split('{{TAX_IN_WORDS}}').join(numberToIndianWords(totalTaxAmt));
+
   // Build HSN tax breakdown table
   let hsnRows = '';
-  for (const [hsn, taxableValue] of Object.entries(hsnMap)) {
-    const cgst = taxableValue * 0.025;
-    const sgst = taxableValue * 0.025;
+  for (const entry of Object.values(hsnMap)) {
+    const halfRate = (entry.gst_rate / 2).toFixed(1).replace(/\.0$/, '');
+    const cgst = entry.taxable * (entry.gst_rate / 200);
+    const sgst = entry.taxable * (entry.gst_rate / 200);
     const totalTax = cgst + sgst;
     hsnRows += `
       <tr>
-        <td class="center">${hsn}</td>
-        <td class="right">${formatIndianNumber(taxableValue)}</td>
-        <td class="center">2.5%</td>
+        <td class="center">${entry.hsn}</td>
+        <td class="right">${formatIndianNumber(entry.taxable)}</td>
+        <td class="center">${halfRate}%</td>
         <td class="right">${formatIndianNumber(cgst)}</td>
-        <td class="center">2.5%</td>
+        <td class="center">${halfRate}%</td>
         <td class="right">${formatIndianNumber(sgst)}</td>
         <td class="right">${formatIndianNumber(totalTax)}</td>
       </tr>
@@ -521,9 +573,6 @@ function populateTemplate(html, invoice) {
 
   // Totals row
   const totalTaxable = invoice.taxable_value || 0;
-  const totalCgst = invoice.cgst_amount || 0;
-  const totalSgst = invoice.sgst_amount || 0;
-  const totalTaxAmt = totalCgst + totalSgst;
   hsnRows += `
     <tr class="hsn-total">
       <td class="center"><strong>Total</strong></td>

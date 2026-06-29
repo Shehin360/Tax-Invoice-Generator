@@ -74,7 +74,42 @@ function initDatabase() {
       key   TEXT PRIMARY KEY,
       value TEXT
     );
+
+    CREATE TABLE IF NOT EXISTS invoice_sequence (
+      id          INTEGER PRIMARY KEY CHECK(id = 1),
+      last_number INTEGER NOT NULL DEFAULT 0
+    );
   `);
+
+  // ─── Migrations ───
+
+  // Migration: Add gst_rate column to invoice_items if not present
+  const itemCols = db.prepare("PRAGMA table_info(invoice_items)").all();
+  const hasGstRate = itemCols.some(c => c.name === 'gst_rate');
+  if (!hasGstRate) {
+    db.exec('ALTER TABLE invoice_items ADD COLUMN gst_rate REAL DEFAULT 5');
+  }
+
+  // Migration: Seed invoice_sequence if empty
+  const seqRow = db.prepare('SELECT last_number FROM invoice_sequence WHERE id = 1').get();
+  if (!seqRow) {
+    // Derive initial sequence from existing data
+    const lastInvoice = db.prepare('SELECT invoice_no FROM invoices ORDER BY id DESC LIMIT 1').get();
+    const prefixSetting = db.prepare("SELECT value FROM settings WHERE key = 'invoice_prefix'").get();
+    const startSetting = db.prepare("SELECT value FROM settings WHERE key = 'invoice_start'").get();
+    const prefix = prefixSetting ? prefixSetting.value : 'INV-';
+    const startNum = startSetting ? parseInt(startSetting.value, 10) : 1;
+
+    let seedNumber = startNum - 1; // Will be incremented on first use
+    if (lastInvoice) {
+      const numPart = lastInvoice.invoice_no.replace(prefix, '');
+      const parsed = parseInt(numPart, 10);
+      if (!isNaN(parsed)) {
+        seedNumber = parsed;
+      }
+    }
+    db.prepare('INSERT INTO invoice_sequence (id, last_number) VALUES (1, ?)').run(seedNumber);
+  }
 
   return db;
 }
@@ -119,18 +154,24 @@ function getSeller() {
 // ─── Buyer Queries ───
 
 function saveBuyer(data) {
+  if (!data.name || !data.name.trim()) {
+    throw new Error('Buyer name is required');
+  }
   const result = db.prepare(`
     INSERT INTO buyers (name, address, gstin, state_name, state_code)
     VALUES (?, ?, ?, ?, ?)
-  `).run(data.name, data.address, data.gstin, data.state_name, data.state_code);
+  `).run(data.name.trim(), data.address, data.gstin, data.state_name, data.state_code);
   return result.lastInsertRowid;
 }
 
 function updateBuyer(id, data) {
+  if (!data.name || !data.name.trim()) {
+    throw new Error('Buyer name is required');
+  }
   db.prepare(`
     UPDATE buyers SET name = ?, address = ?, gstin = ?, state_name = ?, state_code = ?
     WHERE id = ?
-  `).run(data.name, data.address, data.gstin, data.state_name, data.state_code, id);
+  `).run(data.name.trim(), data.address, data.gstin, data.state_name, data.state_code, id);
 }
 
 function deleteBuyer(id) {
@@ -147,7 +188,28 @@ function getBuyerById(id) {
 
 // ─── Invoice Queries ───
 
+/**
+ * Validate invoice data before save/update.
+ * Throws on critical errors, warns on soft issues.
+ */
+function validateInvoiceData(data) {
+  if (!data.invoice_no || !data.invoice_no.trim()) {
+    throw new Error('Invoice number is required');
+  }
+  if (!data.date || !data.date.trim()) {
+    throw new Error('Invoice date is required');
+  }
+  if (data.taxable_value !== undefined && data.taxable_value !== null && data.taxable_value < 0) {
+    throw new Error('Taxable value cannot be negative');
+  }
+  if (data.total_amount !== undefined && data.total_amount !== null && data.total_amount < 0) {
+    throw new Error('Total amount cannot be negative');
+  }
+}
+
 function saveInvoice(data) {
+  validateInvoiceData(data);
+
   const insertInvoice = db.prepare(`
     INSERT INTO invoices (
       invoice_no, date, delivery_note, reference_no, buyer_order_no,
@@ -158,8 +220,8 @@ function saveInvoice(data) {
   `);
 
   const insertItem = db.prepare(`
-    INSERT INTO invoice_items (invoice_id, sl_no, description, hsn_sac, quantity, unit, rate, amount)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO invoice_items (invoice_id, sl_no, description, hsn_sac, quantity, unit, rate, amount, gst_rate)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
 
   const transaction = db.transaction((invoiceData) => {
@@ -178,7 +240,8 @@ function saveInvoice(data) {
       for (const item of invoiceData.items) {
         insertItem.run(
           invoiceId, item.sl_no, item.description, item.hsn_sac,
-          item.quantity, item.unit, item.rate, item.amount
+          item.quantity, item.unit, item.rate, item.amount,
+          item.gst_rate !== undefined && item.gst_rate !== null ? item.gst_rate : 5
         );
       }
     }
@@ -190,6 +253,8 @@ function saveInvoice(data) {
 }
 
 function updateInvoice(id, data) {
+  validateInvoiceData(data);
+
   const updateInv = db.prepare(`
     UPDATE invoices SET
       invoice_no = ?, date = ?, delivery_note = ?, reference_no = ?,
@@ -202,8 +267,8 @@ function updateInvoice(id, data) {
 
   const deleteItems = db.prepare('DELETE FROM invoice_items WHERE invoice_id = ?');
   const insertItem = db.prepare(`
-    INSERT INTO invoice_items (invoice_id, sl_no, description, hsn_sac, quantity, unit, rate, amount)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO invoice_items (invoice_id, sl_no, description, hsn_sac, quantity, unit, rate, amount, gst_rate)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
 
   const transaction = db.transaction((invoiceData) => {
@@ -222,7 +287,8 @@ function updateInvoice(id, data) {
       for (const item of invoiceData.items) {
         insertItem.run(
           id, item.sl_no, item.description, item.hsn_sac,
-          item.quantity, item.unit, item.rate, item.amount
+          item.quantity, item.unit, item.rate, item.amount,
+          item.gst_rate !== undefined && item.gst_rate !== null ? item.gst_rate : 5
         );
       }
     }
@@ -285,25 +351,20 @@ function getInvoiceById(id) {
   return invoice;
 }
 
+/**
+ * Get next invoice number using the dedicated sequence table.
+ * Atomically increments the counter — monotonically increasing, never reused even after deletes.
+ */
 function getNextInvoiceNumber() {
   const prefixSetting = db.prepare("SELECT value FROM settings WHERE key = 'invoice_prefix'").get();
-  const startSetting = db.prepare("SELECT value FROM settings WHERE key = 'invoice_start'").get();
-
   const prefix = prefixSetting ? prefixSetting.value : 'INV-';
-  const startNum = startSetting ? parseInt(startSetting.value, 10) : 1;
 
-  const lastInvoice = db.prepare(
-    'SELECT invoice_no FROM invoices ORDER BY id DESC LIMIT 1'
-  ).get();
-
-  let nextNum = startNum;
-  if (lastInvoice) {
-    const numPart = lastInvoice.invoice_no.replace(prefix, '');
-    const parsed = parseInt(numPart, 10);
-    if (!isNaN(parsed)) {
-      nextNum = parsed + 1;
-    }
-  }
+  // Atomically increment and return in a transaction
+  const nextNum = db.transaction(() => {
+    db.prepare('UPDATE invoice_sequence SET last_number = last_number + 1 WHERE id = 1').run();
+    const row = db.prepare('SELECT last_number FROM invoice_sequence WHERE id = 1').get();
+    return row.last_number;
+  })();
 
   return prefix + String(nextNum).padStart(4, '0');
 }

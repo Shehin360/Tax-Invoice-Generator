@@ -34,3 +34,57 @@ Thumbs.db
 *.njsproj
 *.sln
 *.swp
+
+/plan.md
+/structure.md
+/Projectt Context.md
+
+# --- Dependencies & build output ---
+node_modules/
+dist/
+build/
+out/
+release/
+
+# --- SENSITIVE: SQLite database files (contains real buyer/seller/invoice data) ---
+*.sqlite
+*.sqlite3
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+database/*.sqlite
+database/*.db
+database/data/
+
+# --- SENSITIVE: any local backups of the DB if they ever land inside the repo ---
+*backup*.sqlite
+*backup*.db
+backups/
+
+# --- SENSITIVE: generated invoice PDFs if exported into project folder ---
+*.pdf
+exports/
+generated-invoices/
+
+# --- Env / secrets (in case you add API keys, license keys, etc later) ---
+.env
+.env.local
+.env.*.local
+
+# --- OS/editor noise ---
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# --- Electron packaging artifacts ---
+*.exe
+*.dmg
+*.AppImage
+*.deb
+*.snap
+
+# --- Logs ---
+*.log
+npm-debug.log*

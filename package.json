@@ -26,7 +26,6 @@
       "preload.js",
       "database/**/*",
       "renderer/**/*",
-      "pages/**/*",
       "templates/**/*"
     ],
     "win": {
