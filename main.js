@@ -1,6 +1,8 @@
 const { app, BrowserWindow, ipcMain, dialog, shell, Menu } = require('electron');
 const path = require('path');
 const fs = require('fs');
+const os = require('os');
+const { PDFDocument } = require('pdf-lib');
 const db = require('./database/db');
 const logger = require('./logger');
 
@@ -218,23 +220,32 @@ ipcHandler('save-setting', (key, value) => { db.saveSetting(key, value); });
 ipcHandler('get-setting', (key) => db.getSetting(key));
 ipcHandler('get-all-settings', () => db.getAllSettings());
 
-// PDF Generation
-ipcMain.handle('generate-pdf', async (event, invoiceId) => {
+async function waitForPdfRender(webContents) {
+  await webContents.executeJavaScript(`
+    new Promise((resolve) => {
+      const done = () => requestAnimationFrame(() => requestAnimationFrame(resolve));
+      if (document.fonts && document.fonts.ready) {
+        document.fonts.ready.then(done);
+      } else {
+        done();
+      }
+    })
+  `);
+}
+
+async function normalizePdfForSharing(pdfBuffer) {
+  const pdfDoc = await PDFDocument.load(pdfBuffer);
+  return pdfDoc.save({ useObjectStreams: false });
+}
+
+async function renderInvoicePdf(html) {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'invoice-pdf-'));
+  const htmlPath = path.join(tmpDir, 'invoice.html');
   let pdfWindow = null;
+
   try {
-    const invoice = db.getInvoiceById(invoiceId);
-    if (!invoice) {
-      return { success: false, error: 'Invoice not found' };
-    }
+    fs.writeFileSync(htmlPath, html, 'utf-8');
 
-    // Read template
-    const templatePath = path.join(__dirname, 'templates', 'invoice.html');
-    let html = fs.readFileSync(templatePath, 'utf-8');
-
-    // Replace placeholders with invoice data
-    html = populateTemplate(html, invoice);
-
-    // Create hidden window for PDF generation
     pdfWindow = new BrowserWindow({
       width: 794,  // A4 width at 96 DPI
       height: 1123, // A4 height at 96 DPI
@@ -246,22 +257,48 @@ ipcMain.handle('generate-pdf', async (event, invoiceId) => {
       },
     });
 
-    await pdfWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`);
+    await pdfWindow.loadFile(htmlPath);
+    await waitForPdfRender(pdfWindow.webContents);
 
-    // Wait for fonts and content to render without a fixed delay
-    await pdfWindow.webContents.executeJavaScript('document.fonts.ready.then(() => true)');
-
-    const pdfBuffer = await pdfWindow.webContents.printToPDF({
+    const rawPdf = await pdfWindow.webContents.printToPDF({
       pageSize: 'A4',
-      printBackground: false,
-      margins: { top: 0.2, bottom: 0.2, left: 0.2, right: 0.2 },
+      printBackground: true,
+      preferCSSPageSize: true,
+      generateTaggedPDF: false,
+      margins: { marginType: 'none' },
     });
 
-    // Show save dialog — filename format: Invoice_no.INV-XXXX.pdf
+    if (!rawPdf || rawPdf.length < 5 || rawPdf.slice(0, 4).toString() !== '%PDF') {
+      throw new Error('PDF generation produced an invalid file');
+    }
+
+    return normalizePdfForSharing(rawPdf);
+  } finally {
+    if (pdfWindow && !pdfWindow.isDestroyed()) {
+      pdfWindow.close();
+    }
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
+}
+
+// PDF Generation
+ipcMain.handle('generate-pdf', async (event, invoiceId) => {
+  try {
+    const invoice = db.getInvoiceById(invoiceId);
+    if (!invoice) {
+      return { success: false, error: 'Invoice not found' };
+    }
+
+    const templatePath = path.join(__dirname, 'templates', 'invoice.html');
+    let html = fs.readFileSync(templatePath, 'utf-8');
+    html = populateTemplate(html, invoice);
+
+    const pdfBuffer = await renderInvoicePdf(html);
+
     const safeInvoiceNo = (invoice.invoice_no || 'unknown').replace(/[<>:"/\\|?*]/g, '_');
     const { canceled, filePath } = await dialog.showSaveDialog(mainWindow, {
       title: 'Save Invoice PDF',
-      defaultPath: path.join(app.getPath('documents'), `Invoice_no.${safeInvoiceNo}.pdf`),
+      defaultPath: path.join(app.getPath('documents'), `Invoice_${safeInvoiceNo}.pdf`),
       filters: [{ name: 'PDF Files', extensions: ['pdf'] }],
     });
 
@@ -269,17 +306,12 @@ ipcMain.handle('generate-pdf', async (event, invoiceId) => {
       return { success: false, error: 'Save cancelled' };
     }
 
-    fs.writeFileSync(filePath, pdfBuffer);
+    fs.writeFileSync(filePath, Buffer.from(pdfBuffer));
     shell.openPath(filePath);
 
     return { success: true, path: filePath };
   } catch (err) {
     return { success: false, error: err.message };
-  } finally {
-    // Always close the PDF window to prevent leaked BrowserWindows
-    if (pdfWindow && !pdfWindow.isDestroyed()) {
-      pdfWindow.close();
-    }
   }
 });
 
