@@ -1,5 +1,13 @@
 // ─── New Invoice / Edit Invoice Page ───
 
+let _draftSaveTimer = null;
+
+function scheduleDraftSave(collectFn) {
+  if (editingInvoiceId) return;
+  clearTimeout(_draftSaveTimer);
+  _draftSaveTimer = setTimeout(() => saveDraft(collectFn()), 500);
+}
+
 // GST rate options: [display label, total rate value]
 const GST_RATE_OPTIONS = [
   { label: "0%", value: 0 },
@@ -212,17 +220,17 @@ async function renderNewInvoice(container) {
     tr.querySelector(".item-qty").addEventListener("input", () => {
       calcRow(tr);
       window._formDirty = true;
-      if (!editingInvoiceId) saveDraft(collectData());
+      if (!editingInvoiceId) scheduleDraftSave(collectData);
     });
     tr.querySelector(".item-rate").addEventListener("input", () => {
       calcRow(tr);
       window._formDirty = true;
-      if (!editingInvoiceId) saveDraft(collectData());
+      if (!editingInvoiceId) scheduleDraftSave(collectData);
     });
     tr.querySelector(".item-gst-rate").addEventListener("change", () => {
       calcTotals();
       window._formDirty = true;
-      if (!editingInvoiceId) saveDraft(collectData());
+      if (!editingInvoiceId) scheduleDraftSave(collectData);
     });
     tr.querySelector(".item-desc").addEventListener("input", (e) => {
       const val = e.target.value.trim();
@@ -233,22 +241,22 @@ async function renderNewInvoice(container) {
         calcRow(tr);
       }
       window._formDirty = true;
-      if (!editingInvoiceId) saveDraft(collectData());
+      if (!editingInvoiceId) scheduleDraftSave(collectData);
     });
     tr.querySelector(".item-hsn").addEventListener("input", () => {
       window._formDirty = true;
-      if (!editingInvoiceId) saveDraft(collectData());
+      if (!editingInvoiceId) scheduleDraftSave(collectData);
     });
     tr.querySelector(".item-unit").addEventListener("input", () => {
       window._formDirty = true;
-      if (!editingInvoiceId) saveDraft(collectData());
+      if (!editingInvoiceId) scheduleDraftSave(collectData);
     });
     tr.querySelector(".remove-row").addEventListener("click", () => {
       tr.remove();
       reNumber();
       calcTotals();
       window._formDirty = true;
-      if (!editingInvoiceId) saveDraft(collectData());
+      if (!editingInvoiceId) scheduleDraftSave(collectData);
     });
   }
 
@@ -348,11 +356,11 @@ async function renderNewInvoice(container) {
   container.querySelectorAll(".inv-track").forEach((el) => {
     el.addEventListener("input", () => {
       window._formDirty = true;
-      if (!editingInvoiceId) saveDraft(collectData());
+      if (!editingInvoiceId) scheduleDraftSave(collectData);
     });
     el.addEventListener("change", () => {
       window._formDirty = true;
-      if (!editingInvoiceId) saveDraft(collectData());
+      if (!editingInvoiceId) scheduleDraftSave(collectData);
     });
   });
 

@@ -25,9 +25,14 @@
     "files": [
       "main.js",
       "preload.js",
+      "logger.js",
       "database/**/*",
       "renderer/**/*",
-      "templates/**/*"
+      "templates/**/*",
+      "node_modules/pdf-lib/**/*",
+      "node_modules/@pdf-lib/**/*",
+      "node_modules/pako/**/*",
+      "node_modules/tslib/**/*"
     ],
     "win": {
       "target": "nsis"
