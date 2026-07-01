@@ -1,5 +1,6 @@
 const Database = require('better-sqlite3');
 const path = require('path');
+const fs = require('fs');
 const { app } = require('electron');
 
 let db;
@@ -97,6 +98,30 @@ function initDatabase() {
   if (!hasGstRate) {
     db.exec('ALTER TABLE invoice_items ADD COLUMN gst_rate REAL DEFAULT 5');
   }
+
+  // Migration: inline buyer snapshot columns on invoices (one-time buyers without buyers table row)
+  const invCols = db.prepare("PRAGMA table_info(invoices)").all();
+  const invColNames = new Set(invCols.map(c => c.name));
+  const inlineBuyerCols = [
+    ['buyer_name', 'TEXT'],
+    ['buyer_address', 'TEXT'],
+    ['buyer_gstin', 'TEXT'],
+    ['buyer_state_name', 'TEXT'],
+    ['buyer_state_code', 'TEXT'],
+  ];
+  for (const [col, type] of inlineBuyerCols) {
+    if (!invColNames.has(col)) {
+      db.exec(`ALTER TABLE invoices ADD COLUMN ${col} ${type}`);
+    }
+  }
+
+  // Performance indexes
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_invoices_date ON invoices(date);
+    CREATE INDEX IF NOT EXISTS idx_invoices_buyer_id ON invoices(buyer_id);
+    CREATE INDEX IF NOT EXISTS idx_invoices_created_at ON invoices(created_at);
+    CREATE INDEX IF NOT EXISTS idx_invoice_items_invoice_id ON invoice_items(invoice_id);
+  `);
 
   // Migration: Seed invoice_sequence if empty
   const seqRow = db.prepare('SELECT last_number FROM invoice_sequence WHERE id = 1').get();
@@ -257,8 +282,9 @@ function saveInvoice(data) {
       invoice_no, date, delivery_note, reference_no, buyer_order_no,
       dispatch_doc_no, dispatched_through, destination, vehicle_no,
       terms_of_delivery, seller_id, buyer_id,
+      buyer_name, buyer_address, buyer_gstin, buyer_state_name, buyer_state_code,
       taxable_value, cgst_amount, sgst_amount, total_amount
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
 
   const insertItem = db.prepare(`
@@ -272,6 +298,9 @@ function saveInvoice(data) {
       invoiceData.reference_no, invoiceData.buyer_order_no, invoiceData.dispatch_doc_no,
       invoiceData.dispatched_through, invoiceData.destination, invoiceData.vehicle_no,
       invoiceData.terms_of_delivery, invoiceData.seller_id, invoiceData.buyer_id,
+      invoiceData.buyer_name || null, invoiceData.buyer_address || null,
+      invoiceData.buyer_gstin || null, invoiceData.buyer_state_name || null,
+      invoiceData.buyer_state_code || null,
       invoiceData.taxable_value, invoiceData.cgst_amount, invoiceData.sgst_amount,
       invoiceData.total_amount
     );
@@ -313,6 +342,8 @@ function updateInvoice(id, data) {
       buyer_order_no = ?, dispatch_doc_no = ?, dispatched_through = ?,
       destination = ?, vehicle_no = ?, terms_of_delivery = ?,
       seller_id = ?, buyer_id = ?,
+      buyer_name = ?, buyer_address = ?, buyer_gstin = ?,
+      buyer_state_name = ?, buyer_state_code = ?,
       taxable_value = ?, cgst_amount = ?, sgst_amount = ?, total_amount = ?
     WHERE id = ?
   `);
@@ -329,6 +360,9 @@ function updateInvoice(id, data) {
       invoiceData.reference_no, invoiceData.buyer_order_no, invoiceData.dispatch_doc_no,
       invoiceData.dispatched_through, invoiceData.destination, invoiceData.vehicle_no,
       invoiceData.terms_of_delivery, invoiceData.seller_id, invoiceData.buyer_id,
+      invoiceData.buyer_name || null, invoiceData.buyer_address || null,
+      invoiceData.buyer_gstin || null, invoiceData.buyer_state_name || null,
+      invoiceData.buyer_state_code || null,
       invoiceData.taxable_value, invoiceData.cgst_amount, invoiceData.sgst_amount,
       invoiceData.total_amount, id
     );
@@ -365,7 +399,7 @@ function checkDuplicateInvoice(invoiceNo, excludeId = null) {
 
 function getInvoices(filters = {}) {
   let query = `
-    SELECT i.*, b.name as buyer_name
+    SELECT i.*, COALESCE(b.name, i.buyer_name) as buyer_name
     FROM invoices i
     LEFT JOIN buyers b ON i.buyer_id = b.id
     WHERE 1=1
@@ -373,8 +407,8 @@ function getInvoices(filters = {}) {
   const params = [];
 
   if (filters.search) {
-    query += ` AND (i.invoice_no LIKE ? OR b.name LIKE ?)`;
-    params.push(`%${filters.search}%`, `%${filters.search}%`);
+    query += ` AND (i.invoice_no LIKE ? OR b.name LIKE ? OR i.buyer_name LIKE ?)`;
+    params.push(`%${filters.search}%`, `%${filters.search}%`, `%${filters.search}%`);
   }
   if (filters.dateFrom) {
     query += ` AND i.date >= ?`;
@@ -402,8 +436,8 @@ function getInvoices(filters = {}) {
   `;
   const countParams = [];
   if (filters.search) {
-    countQuery += ` AND (i.invoice_no LIKE ? OR b.name LIKE ?)`;
-    countParams.push(`%${filters.search}%`, `%${filters.search}%`);
+    countQuery += ` AND (i.invoice_no LIKE ? OR b.name LIKE ? OR i.buyer_name LIKE ?)`;
+    countParams.push(`%${filters.search}%`, `%${filters.search}%`, `%${filters.search}%`);
   }
   if (filters.dateFrom) {
     countQuery += ` AND i.date >= ?`;
@@ -421,9 +455,12 @@ function getInvoices(filters = {}) {
 
 function getInvoiceById(id) {
   const invoice = db.prepare(`
-    SELECT i.*, b.name as buyer_name, b.address as buyer_address,
-           b.gstin as buyer_gstin, b.state_name as buyer_state_name,
-           b.state_code as buyer_state_code,
+    SELECT i.*,
+           COALESCE(b.name, i.buyer_name) as buyer_name,
+           COALESCE(b.address, i.buyer_address) as buyer_address,
+           COALESCE(b.gstin, i.buyer_gstin) as buyer_gstin,
+           COALESCE(b.state_name, i.buyer_state_name) as buyer_state_name,
+           COALESCE(b.state_code, i.buyer_state_code) as buyer_state_code,
            s.name as seller_name, s.address as seller_address,
            s.gstin as seller_gstin, s.state_name as seller_state_name,
            s.state_code as seller_state_code
@@ -505,6 +542,48 @@ function getDashboardStats() {
   return { totalInvoices, monthRevenue, totalGst };
 }
 
+function getDashboardData(filters = {}) {
+  return {
+    stats: getDashboardStats(),
+    invoices: getInvoices(filters),
+  };
+}
+
+function validateDatabaseFile(filePath) {
+  const testDb = new Database(filePath, { readonly: true, fileMustExist: true });
+  try {
+    const check = testDb.pragma('quick_check');
+    if (check.length > 0 && check[0].quick_check !== 'ok') {
+      throw new Error('Database integrity check failed');
+    }
+    const invoicesTable = testDb.prepare(
+      "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'invoices'"
+    ).get();
+    if (!invoicesTable) {
+      throw new Error('Not a valid invoice database backup');
+    }
+    return true;
+  } finally {
+    testDb.close();
+  }
+}
+
+function restoreDatabase(sourcePath) {
+  validateDatabaseFile(sourcePath);
+  const dbPath = getDbPath();
+  const safetyBackup = path.join(
+    path.dirname(dbPath),
+    `invoices_pre_restore_${Date.now()}.db`
+  );
+  if (fs.existsSync(dbPath)) {
+    fs.copyFileSync(dbPath, safetyBackup);
+  }
+  closeDatabase();
+  fs.copyFileSync(sourcePath, dbPath);
+  initDatabase();
+  return { restoredFrom: sourcePath, safetyBackup };
+}
+
 // ─── Reports ───
 
 function getGstr1Summary(monthStr) {
@@ -556,5 +635,8 @@ module.exports = {
   getSetting,
   getAllSettings,
   getDashboardStats,
+  getDashboardData,
   getGstr1Summary,
+  validateDatabaseFile,
+  restoreDatabase,
 };

@@ -271,6 +271,8 @@ table tbody tr:hover { background: rgba(240,165,0,0.03); }
   animation: scaleIn 0.25s ease;
 }
 .preview-modal-content { max-width: 860px; height: 90vh; }
+.preview-modal-content .modal-body { background: #fff; }
+#preview-iframe { background: #fff; color-scheme: light only; }
 .modal-header {
   padding: 20px 24px; border-bottom: 1px solid var(--border);
   display: flex; justify-content: space-between; align-items: center;
@@ -296,14 +298,6 @@ table tbody tr:hover { background: rgba(240,165,0,0.03); }
 /* ─── Checkbox ─── */
 .checkbox-wrapper { display: flex; align-items: center; gap: 8px; cursor: pointer; }
 .checkbox-wrapper input[type="checkbox"] { width: 18px; height: 18px; accent-color: var(--primary); cursor: pointer; }
-
-/* ─── Empty State ─── */
-.empty-state {
-  text-align: center; padding: 60px 20px; color: var(--text-secondary);
-}
-.empty-state svg { margin-bottom: 16px; color: var(--text-muted); }
-.empty-state h3 { font-size: 18px; font-weight: 600; color: var(--text-primary); margin-bottom: 8px; }
-.empty-state p { font-size: 14px; max-width: 360px; margin: 0 auto 20px; }
 
 /* ─── Toggle Switch ─── */
 .toggle { position: relative; width: 48px; height: 26px; }
@@ -346,22 +340,6 @@ table tbody tr:hover { background: rgba(240,165,0,0.03); }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
 ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
-
-/* ─── Loading Spinner ─── */
-.spinner {
-  width: 24px; height: 24px; border: 3px solid var(--border);
-  border-top-color: var(--primary); border-radius: 50%;
-  animation: spin 0.6s linear infinite;
-}
-@keyframes spin { to { transform: rotate(360deg); } }
-
-/* ─── Badge ─── */
-.badge {
-  display: inline-flex; align-items: center;
-  padding: 3px 10px; border-radius: 20px;
-  font-size: 12px; font-weight: 600;
-}
-.badge-gold { background: var(--primary-light); color: var(--primary); }
 
 /* ─── Responsive ─── */
 @media (max-width: 900px) {

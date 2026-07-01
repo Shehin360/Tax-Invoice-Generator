@@ -29,6 +29,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // Dashboard & Reports
   getDashboardStats: () => ipcRenderer.invoke('get-dashboard-stats'),
+  getDashboardData: (filters) => ipcRenderer.invoke('get-dashboard-data', filters),
   getGstr1Summary: (month) => ipcRenderer.invoke('get-gstr1-summary', month),
 
   // Settings
@@ -43,4 +44,5 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Backup
   backupDatabase: () => ipcRenderer.invoke('backup-database'),
   selectBackupFolder: () => ipcRenderer.invoke('select-backup-folder'),
+  restoreDatabase: () => ipcRenderer.invoke('restore-database'),
 });

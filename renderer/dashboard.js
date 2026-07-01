@@ -4,10 +4,9 @@ let _currentPage = 1;
 const _itemsPerPage = 10;
 
 async function renderDashboard(container) {
-  const statsRes = await window.electronAPI.getDashboardStats();
-  const stats = statsRes.success ? statsRes.data : { totalInvoices: 0, monthRevenue: 0, totalGst: 0 };
-  const invRes = await window.electronAPI.getInvoices({ limit: _itemsPerPage, offset: 0 });
-  const invoicesData = invRes.success ? invRes.data : { data: [], total: 0 };
+  const dashRes = await window.electronAPI.getDashboardData({ limit: _itemsPerPage, offset: 0 });
+  const stats = dashRes.success ? dashRes.data.stats : { totalInvoices: 0, monthRevenue: 0, totalGst: 0 };
+  const invoicesData = dashRes.success ? dashRes.data.invoices : { data: [], total: 0 };
 
   container.innerHTML = `
     <div class="page-header">
@@ -72,7 +71,10 @@ async function renderDashboard(container) {
   // Live search (debounced 300ms)
   document.getElementById('dash-search').addEventListener('input', () => {
     clearTimeout(_searchDebounceTimer);
-    _searchDebounceTimer = setTimeout(() => applyDashboardFilters(), 300);
+    _searchDebounceTimer = setTimeout(() => {
+      _currentPage = 1;
+      applyDashboardFilters();
+    }, 300);
   });
 
   // Enter key in search

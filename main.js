@@ -211,6 +211,7 @@ ipcHandler('check-duplicate-invoice', (invoiceNo, excludeId) => db.checkDuplicat
 
 // Dashboard
 ipcHandler('get-dashboard-stats', () => db.getDashboardStats());
+ipcHandler('get-dashboard-data', (filters) => db.getDashboardData(filters));
 
 // Reports
 ipcHandler('get-gstr1-summary', (month) => db.getGstr1Summary(month));
@@ -276,6 +277,7 @@ async function renderInvoicePdf(html) {
   } finally {
     if (pdfWindow && !pdfWindow.isDestroyed()) {
       pdfWindow.close();
+      pdfWindow.destroy();
     }
     fs.rmSync(tmpDir, { recursive: true, force: true });
   }
@@ -367,6 +369,25 @@ ipcMain.handle('select-backup-folder', async () => {
       return { success: false, error: 'No folder selected' };
     }
     return { success: true, data: filePaths[0] };
+  } catch (err) {
+    return { success: false, error: err.message };
+  }
+});
+
+// Restore database from a local .db backup file
+ipcMain.handle('restore-database', async () => {
+  try {
+    const { canceled, filePaths } = await dialog.showOpenDialog(mainWindow, {
+      title: 'Select Database Backup to Restore',
+      properties: ['openFile'],
+      filters: [{ name: 'SQLite Database', extensions: ['db'] }],
+    });
+    if (canceled || filePaths.length === 0) {
+      return { success: false, error: 'Restore cancelled' };
+    }
+
+    const result = db.restoreDatabase(filePaths[0]);
+    return { success: true, data: result };
   } catch (err) {
     return { success: false, error: err.message };
   }
@@ -498,12 +519,12 @@ function formatIndianDate(isoDate) {
 
 function populateTemplate(html, invoice) {
   const replacements = {
-    '{{SELLER_NAME}}': invoice.seller_name || '',
-    '{{SELLER_ADDRESS}}': nlToBr(invoice.seller_address),
-    '{{SELLER_GSTIN}}': invoice.seller_gstin || '',
-    '{{SELLER_STATE}}': invoice.seller_state_name || '',
-    '{{SELLER_STATE_CODE}}': invoice.seller_state_code || '',
-    '{{INVOICE_NO}}': invoice.invoice_no || '',
+    '{{SELLER_NAME}}': escapeHtml(invoice.seller_name || ''),
+    '{{SELLER_ADDRESS}}': nlToBr(escapeHtml(invoice.seller_address || '')),
+    '{{SELLER_GSTIN}}': escapeHtml(invoice.seller_gstin || ''),
+    '{{SELLER_STATE}}': escapeHtml(invoice.seller_state_name || ''),
+    '{{SELLER_STATE_CODE}}': escapeHtml(invoice.seller_state_code || ''),
+    '{{INVOICE_NO}}': escapeHtml(invoice.invoice_no || ''),
     '{{DATE}}': formatIndianDate(invoice.date),
     '{{DELIVERY_NOTE}}': invoice.delivery_note || '',
     '{{REFERENCE_NO}}': invoice.reference_no || '',
@@ -513,11 +534,11 @@ function populateTemplate(html, invoice) {
     '{{DESTINATION}}': invoice.destination || '',
     '{{VEHICLE_NO}}': invoice.vehicle_no || '',
     '{{TERMS_OF_DELIVERY}}': invoice.terms_of_delivery || '',
-    '{{BUYER_NAME}}': invoice.buyer_name || '',
-    '{{BUYER_ADDRESS}}': nlToBr(invoice.buyer_address),
-    '{{BUYER_GSTIN}}': invoice.buyer_gstin || '',
-    '{{BUYER_STATE}}': invoice.buyer_state_name || '',
-    '{{BUYER_STATE_CODE}}': invoice.buyer_state_code || '',
+    '{{BUYER_NAME}}': escapeHtml(invoice.buyer_name || ''),
+    '{{BUYER_ADDRESS}}': nlToBr(escapeHtml(invoice.buyer_address || '')),
+    '{{BUYER_GSTIN}}': escapeHtml(invoice.buyer_gstin || ''),
+    '{{BUYER_STATE}}': escapeHtml(invoice.buyer_state_name || ''),
+    '{{BUYER_STATE_CODE}}': escapeHtml(invoice.buyer_state_code || ''),
     '{{TAXABLE_VALUE}}': formatIndianNumber(invoice.taxable_value),
     '{{TOTAL_AMOUNT}}': formatIndianNumber(invoice.total_amount),
     '{{AMOUNT_IN_WORDS}}': numberToIndianWords(invoice.total_amount || 0),

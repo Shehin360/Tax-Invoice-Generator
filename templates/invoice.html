@@ -5,8 +5,10 @@
 <title>Tax Invoice - {{INVOICE_NO}}</title>
 <style>
   @page { size: A4; margin: 10mm; }
+  html { color-scheme: light only; }
   * { margin: 0; padding: 0; box-sizing: border-box; }
-  body { font-family: Arial, Helvetica, sans-serif; font-size: 11px; color: #000; line-height: 1.4; }
+  body { font-family: Arial, Helvetica, sans-serif; font-size: 11px; color: #000 !important; background: #fff !important; line-height: 1.4; }
+  .invoice-wrapper { background: #fff !important; color: #000 !important; }
   .invoice-wrapper {
     width: 100%;
     border: 2px solid #000;

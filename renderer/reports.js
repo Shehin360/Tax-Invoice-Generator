@@ -11,7 +11,7 @@ async function renderReports(container) {
         <p class="page-subtitle">View taxable value and GST breakdown</p>
       </div>
       <div>
-        <input type="month" id="report-month" class="form-control" style="width:200px; display:inline-block;" value="${defaultMonth}">
+        <input type="month" id="report-month" class="form-input" style="width:200px; display:inline-block;" value="${defaultMonth}">
         <button class="btn btn-primary" id="btn-fetch-report" style="margin-left:8px;">Generate</button>
       </div>
     </div>

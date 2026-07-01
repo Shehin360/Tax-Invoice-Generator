@@ -13,13 +13,13 @@ async function renderSettings(container) {
       <div class="card-header"><h3>🏢 Seller / Business Profile</h3></div>
       <div class="card-body">
         <div class="form-row">
-          <div class="form-group"><label class="form-label">Business Name *</label><input type="text" class="form-input" id="set-name" value="${seller ? seller.name : ''}"></div>
-          <div class="form-group"><label class="form-label">GSTIN</label><input type="text" class="form-input" id="set-gstin" value="${seller ? seller.gstin || '' : ''}"></div>
+          <div class="form-group"><label class="form-label">Business Name *</label><input type="text" class="form-input" id="set-name" value="${escapeHtml(seller ? seller.name : '')}"></div>
+          <div class="form-group"><label class="form-label">GSTIN</label><input type="text" class="form-input" id="set-gstin" value="${escapeHtml(seller ? seller.gstin || '' : '')}"></div>
         </div>
-        <div class="form-group"><label class="form-label">Address</label><textarea class="form-textarea" id="set-address" rows="2">${seller ? seller.address || '' : ''}</textarea></div>
+        <div class="form-group"><label class="form-label">Address</label><textarea class="form-textarea" id="set-address" rows="2">${escapeHtml(seller ? seller.address || '' : '')}</textarea></div>
         <div class="form-row">
-          <div class="form-group"><label class="form-label">State</label><input type="text" class="form-input" id="set-state" value="${seller ? seller.state_name || '' : ''}"></div>
-          <div class="form-group"><label class="form-label">State Code</label><input type="text" class="form-input" id="set-code" value="${seller ? seller.state_code || '' : ''}"></div>
+          <div class="form-group"><label class="form-label">State</label><input type="text" class="form-input" id="set-state" value="${escapeHtml(seller ? seller.state_name || '' : '')}"></div>
+          <div class="form-group"><label class="form-label">State Code</label><input type="text" class="form-input" id="set-code" value="${escapeHtml(seller ? seller.state_code || '' : '')}"></div>
         </div>
         <button class="btn btn-primary" id="set-save-seller">Save Profile</button>
       </div>
@@ -36,20 +36,24 @@ async function renderSettings(container) {
     <div class="card" style="margin-bottom:20px;">
       <div class="card-header"><h3>🔢 Invoice Numbering</h3></div>
       <div class="card-body">
+        <p style="font-size:13px;color:var(--text-secondary);margin-bottom:16px;line-height:1.5;">
+          Invoice numbers are entered manually on each invoice (e.g. to match physical tax invoice slips).
+          Prefix and start number below only affect the suggested default when creating a new invoice.
+        </p>
         <div class="form-row">
-          <div class="form-group"><label class="form-label">Invoice Prefix</label><input type="text" class="form-input" id="set-prefix" value="${settings.invoice_prefix || 'INV-'}" placeholder="INV-"></div>
-          <div class="form-group"><label class="form-label">Start Number</label><input type="number" class="form-input" id="set-start" value="${settings.invoice_start || '1'}" placeholder="1"></div>
+          <div class="form-group"><label class="form-label">Invoice Prefix</label><input type="text" class="form-input" id="set-prefix" value="${escapeHtml(settings.invoice_prefix || 'INV-')}" placeholder="INV-"></div>
+          <div class="form-group"><label class="form-label">Start Number</label><input type="number" class="form-input" id="set-start" value="${escapeHtml(settings.invoice_start || '1')}" placeholder="1"></div>
         </div>
         <button class="btn btn-primary" id="set-save-numbering">Save Numbering</button>
       </div>
     </div>
-    <div class="card">
-      <div class="card-header"><h3>💾 Backup</h3></div>
+    <div class="card" style="margin-bottom:20px;">
+      <div class="card-header"><h3>💾 Backup &amp; Restore</h3></div>
       <div class="card-body">
         <div class="form-group">
           <label class="form-label">Backup Folder</label>
           <div style="display:flex;gap:12px;">
-            <input type="text" class="form-input" id="set-backup-path" value="${settings.backup_path || ''}" placeholder="Select a folder..." readonly>
+            <input type="text" class="form-input" id="set-backup-path" value="${escapeHtml(settings.backup_path || '')}" placeholder="Select a folder..." readonly>
             <button class="btn btn-secondary" id="set-browse-backup">Browse</button>
           </div>
         </div>
@@ -57,10 +61,25 @@ async function renderSettings(container) {
           <label class="form-label" style="margin:0;">Auto-backup on close</label>
           <label class="toggle"><input type="checkbox" id="set-auto-backup" ${settings.auto_backup === 'true' ? 'checked' : ''}><span class="toggle-slider"></span></label>
         </div>
-        <div style="display:flex;gap:12px;">
+        <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:20px;">
           <button class="btn btn-primary" id="set-save-backup">Save Backup Settings</button>
           <button class="btn btn-secondary" id="set-backup-now">Backup Now</button>
+          <button class="btn btn-danger" id="set-restore-db" style="background:var(--danger);color:#fff;">Restore from Backup</button>
         </div>
+        <p style="font-size:12px;color:var(--text-muted);line-height:1.5;">
+          Restore replaces the current database with a selected <code>.db</code> backup file.
+          Your current database is saved as a safety copy before restore.
+        </p>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-header"><h3>☁️ Cloud Backup</h3></div>
+      <div class="card-body">
+        <p style="font-size:13px;color:var(--text-secondary);margin-bottom:16px;line-height:1.5;">
+          Google Drive upload alongside local backup is planned for a future update.
+          Local backup and restore are available now.
+        </p>
+        <button class="btn btn-secondary" disabled title="Coming in a future update">Connect Google Drive (Coming Soon)</button>
       </div>
     </div>`;
 
@@ -101,5 +120,25 @@ async function renderSettings(container) {
   document.getElementById('set-backup-now').addEventListener('click', async () => {
     const r = await window.electronAPI.backupDatabase();
     r.success ? showToast('Backup created at: ' + r.path) : showToast(r.error || 'Backup failed', 'error');
+  });
+
+  document.getElementById('set-restore-db').addEventListener('click', async () => {
+    if (!confirm(
+      'Restore database from a backup file?\n\n' +
+      'This will replace all current invoices, buyers, and settings with the backup data. ' +
+      'A safety copy of your current database will be saved first.'
+    )) return;
+
+    const r = await window.electronAPI.restoreDatabase();
+    if (r.success) {
+      clearDraft();
+      window._newInvoiceNumber = null;
+      window._formDirty = false;
+      editingInvoiceId = null;
+      showToast('Database restored successfully. Reloading...', 'info');
+      setTimeout(() => navigateTo('dashboard'), 800);
+    } else {
+      showToast(r.error || 'Restore failed', 'error');
+    }
   });
 }
